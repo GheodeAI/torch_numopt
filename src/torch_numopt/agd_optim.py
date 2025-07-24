@@ -55,15 +55,10 @@ class AGD(SecondOrderOptimizer):
         line_search_method: str = "const",
         line_search_cond: str = "armijo",
         solver: str = "solve",
+        batch_size: int = None,
         **kwargs,
     ):
-        assert lr > 0, "Learning rate must be a positive number."
-
-        super().__init__(model.parameters(), {"lr": lr})
-
-        self._model = model
-        self._param_keys = dict(model.named_parameters()).keys()
-        self._params = self.param_groups[0]["params"]
+        super().__init__(model, lr=lr, batch_size=batch_size)
 
         self.mu = mu
         self.mu_dec = mu_dec
@@ -114,8 +109,7 @@ class AGD(SecondOrderOptimizer):
             return loss_fn(out, y)
 
         # Calculate exact Hessian matrix
-        h_list = torch.autograd.functional.hessian(eval_model, model_params, create_graph=True, vectorize=True)
-        h_list = [self._reshape_hessian(h_list[i][i]) for i, _ in enumerate(h_list)]
+        h_list = self.exact_hessian(x, y, loss_fn, vectorize=True)
 
         for group in self.param_groups:
             lr = group["lr"]

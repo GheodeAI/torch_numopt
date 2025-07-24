@@ -63,8 +63,6 @@ class GradientDescentLS(LineSearchOptimizer):
         if closure is not None:
             raise NotImplementedError("This optimizer cannot handle closures.")
 
-        model_params = tuple(self._model.parameters())
-
         def eval_model(*input_params):
             out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
             return loss_fn(out, y)
