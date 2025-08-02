@@ -72,7 +72,7 @@ class NewtonRaphson(SecondOrderOptimizer):
         dir_list = [None] * len(d_p_list)
         for i, (d_p, h) in enumerate(zip(d_p_list, h_list)):
             match self.damping:
-                case "identity":
+                case True | "identity":
                     h_adjusted = h + self.mu * torch.eye(h.shape[0], device=h.device)
                 case "fletcher":
                     h_adjusted = h + self.mu * h.diagonal()
