@@ -14,6 +14,8 @@ class AGD(SecondOrderOptimizer):
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
     and the matlab implementation of 'learnlm' https://es.mathworks.com/help/deeplearning/ref/trainlm.html#d126e69092
 
+    Damped Greatest Descent Newton (DGDN)
+
     Parameters
     ----------
 
@@ -27,7 +29,7 @@ class AGD(SecondOrderOptimizer):
         Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
     mu_max: float
         Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    use_diagonal: bool
+    fletcher: bool
         Whether to use the diagonal of the Hessian matrix instead of an identity matrix to adjust the Hessian matrix.
     c1: float
         Coefficient of the sufficient increase condition in backtracking line search.
@@ -46,8 +48,7 @@ class AGD(SecondOrderOptimizer):
         model: nn.Module,
         lr: float,
         mu: float = 1,
-        mu_dec: float = 0.1,
-        mu_max: float = 1e10,
+        radius: float = 1000,
         fletcher: bool = False,
         c1: float = 1e-4,
         c2: float = 0.9,
@@ -60,9 +61,7 @@ class AGD(SecondOrderOptimizer):
     ):
         super().__init__(model, lr=lr, batch_size=batch_size)
 
-        self.mu = mu
-        self.mu_dec = mu_dec
-        self.mu_max = mu_max
+        self.radius = radius
         self.fletcher = fletcher
 
         # Coefficients for the strong-wolfe conditions
@@ -77,10 +76,12 @@ class AGD(SecondOrderOptimizer):
     def get_step_direction(self, d_p_list, h_list):
         dir_list = [None] * len(d_p_list)
         for i, (d_p, h) in enumerate(zip(d_p_list, h_list)):
+            mu = torch.linalg.vector_norm(d_p)/self.radius
+
             if self.fletcher:
-                h_adjusted = h + self.mu * h.diagonal()
+                h_adjusted = h + mu * h.diagonal()
             else:
-                h_adjusted = h + self.mu * torch.eye(h.shape[0], device=h.device)
+                h_adjusted = h + mu * torch.eye(h.shape[0], device=h.device)
 
             match self.solver:
                 case "pinv":
