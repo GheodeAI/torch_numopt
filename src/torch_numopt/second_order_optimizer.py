@@ -40,9 +40,6 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
             Use vectorization in pytorch's implementation of the hessian calculation.
         """
 
-        if closure is not None:
-            raise NotImplementedError("This optimizer cannot handle closures.")
-
         model_params = tuple(self._model.parameters())
 
         loss_fn = copy(loss_fn)
@@ -113,9 +110,6 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
         vectorize: boolean
             Use vectorization in pytorch's implementation of the hessian calculation.
         """
-        if closure is not None:
-            raise NotImplementedError("This optimizer cannot handle closures.")
-
         model_params = tuple(self._model.parameters())
 
         scale = 1 / len(x) if loss_fn.reduction == "mean" else 1

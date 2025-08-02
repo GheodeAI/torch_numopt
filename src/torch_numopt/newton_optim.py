@@ -25,6 +25,14 @@ class NewtonRaphson(SecondOrderOptimizer):
         Coefficient used in the second condition for wolfe conditions.
     tau: float
         Factor used to reduce the step size in each step of the backtracking line search.
+    damping: bool
+        Whether to use the diagonal of the Hessian matrix instead of an identity matrix to adjust the Hessian matrix.
+    mu: float
+        Initial value for the coefficient used when adding a diagonal matrix to the Hessian matrix.
+    mu_dec: float
+        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
+    mu_max: float
+        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
     line_search_method: str
         Method used for line search, options are "backtrack" and "constant".
     line_search_cond: str
@@ -38,6 +46,8 @@ class NewtonRaphson(SecondOrderOptimizer):
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
+        damping: str = "none",
+        mu: float = 1,
         line_search_method: str = "const",
         line_search_cond: str = "armijo",
         solver: str = "solve",
@@ -45,6 +55,9 @@ class NewtonRaphson(SecondOrderOptimizer):
         **kwargs,
     ):
         super().__init__(model, lr=lr, batch_size=batch_size)
+
+        self.mu = mu
+        self.damping = damping
 
         # Coefficients for the strong-wolfe conditions
         self.c1 = c1
@@ -58,15 +71,23 @@ class NewtonRaphson(SecondOrderOptimizer):
     def get_step_direction(self, d_p_list, h_list):
         dir_list = [None] * len(d_p_list)
         for i, (d_p, h) in enumerate(zip(d_p_list, h_list)):
-            if torch.linalg.cond(h) > 1e8:
-                h = fix_stability(h)
+            match self.damping:
+                case "identity":
+                    h_adjusted = h + self.mu * torch.eye(h.shape[0], device=h.device)
+                case "fletcher":
+                    h_adjusted = h + self.mu * h.diagonal()
+                case _:
+                    h_adjusted = h
+
+            if torch.linalg.cond(h_adjusted) > 1e8:
+                h_adjusted = fix_stability(h_adjusted)
 
             match self.solver:
                 case "pinv":
-                    h_i = h.pinverse()
+                    h_i = h_adjusted.pinverse()
                     d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
                 case "solve":
-                    d2_p = torch.linalg.solve(h, d_p.flatten()).reshape(d_p.shape)
+                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(d_p.shape)
 
             dir_list[i] = d2_p
 
