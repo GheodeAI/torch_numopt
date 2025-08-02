@@ -11,7 +11,7 @@ def fix_stability(mat: torch.Tensor):
 
     mat: torch.Tensor
         Ill conditioned matrix.
-    
+
     Returns
     -------
     fixed_mat: torch.Tensor
@@ -38,7 +38,7 @@ def pinv_svd_trunc(mat: torch.tensor, thresh: float = 1e-4):
     Returns
     -------
     inverted_mat: torch.Tensor
-       Pseudoinverse of the input matrix. 
+       Pseudoinverse of the input matrix.
     """
 
     U, S, Vt = torch.linalg.svd(mat)

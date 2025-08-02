@@ -20,7 +20,7 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
         grad: list,
         c1: float,
         c2: float,
-        line_search_cond: str
+        line_search_cond: str,
     ):
         """
         Compute one of the stopping conditions for line search methods.
@@ -37,7 +37,7 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
         c1: float
         c2: float
         line_search_cond: str
-    
+
         Returns
         -------
         accepted: bool
@@ -79,11 +79,11 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
         c1: float,
         c2: float,
         tau: float,
-        line_search_cond: str = "armijo"
+        line_search_cond: str = "armijo",
     ):
         """
         Perform backtracking line search.
-        
+
         Parameters
         ----------
 
@@ -121,17 +121,10 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
 
         return new_params
 
-    def apply_gradients(
-        self,
-        lr: float,
-        eval_model: callable,
-        params: list,
-        d_p_list: list,
-        h_list: list = None
-    ):
+    def apply_gradients(self, lr: float, eval_model: callable, params: list, d_p_list: list, h_list: list = None):
         """
         Updates the parameters of the network using a direction and a step length.
-        
+
         Parameters
         ----------
 
@@ -167,7 +160,7 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
             List of gradients of the parameters.
         h_list: list
             List of Hessians of the parameters.
-        
+
         Returns
         -------
         p: list

@@ -56,15 +56,10 @@ class LM(SecondOrderOptimizer):
         line_search_method: str = "const",
         line_search_cond: str = "armijo",
         solver: str = "solve",
+        batch_size: int = None,
         **kwargs,
     ):
-        assert lr > 0, "Learning rate must be a positive number."
-
-        super().__init__(model.parameters(), {"lr": lr})
-
-        self._model = model
-        self._param_keys = dict(model.named_parameters()).keys()
-        self._params = self.param_groups[0]["params"]
+        super().__init__(model, lr=lr, batch_size=batch_size)
 
         self.mu = mu
         self.mu_dec = mu_dec
@@ -99,7 +94,7 @@ class LM(SecondOrderOptimizer):
                         h_i = pinv_svd_trunc(h_adjusted)
                     else:
                         h_i = h_adjusted.pinverse()
-                    
+
                     d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
                 case "solve":
                     d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(d_p.shape)
@@ -113,29 +108,17 @@ class LM(SecondOrderOptimizer):
         if closure is not None:
             raise NotImplementedError("This optimizer cannot handle closures.")
 
-        residual_fn = copy(loss_fn)
-        residual_fn.reduction = "none"
-
         model_params = tuple(self._model.parameters())
 
         def eval_model(*input_params):
             out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
             return loss_fn(out, y)
 
-        def get_residuals(*input_params):
-            out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
-            return residual_fn(out, y)
+        # Calculate approximate Hessian matrix
+        h_list = self.approx_hessian_gn(x, y, loss_fn, vectorize=True)
 
         for group in self.param_groups:
             lr = group["lr"]
-
-            # Calculate approximate Hessian matrix
-            j_list = torch.autograd.functional.jacobian(get_residuals, model_params, create_graph=False, vectorize=True)
-            h_list = [None] * len(j_list)
-            for j_idx, j in enumerate(j_list):
-                j = j.flatten(start_dim=1)
-                approx_h = j.T @ j
-                h_list[j_idx] = self._reshape_hessian(approx_h)
 
             # Calculte gradients
             params_with_grad = []
