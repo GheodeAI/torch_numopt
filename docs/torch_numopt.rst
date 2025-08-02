@@ -1,83 +1,26 @@
 torch\_numopt package
 =====================
 
-Second Order Optimizer class
----------------------------------------------
+Base classes
+------------
 
-.. autoclass:: torch_numopt.second_order_optimizer.SecondOrderOptimizer
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+   :maxdepth: 2
 
-AGD (Approximate Greatest Descent) algorithm
---------------------------------------------
+   torch_numopt.base_classes
 
-.. autoclass:: torch_numopt.agd_optim.AGD
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Conjugate Gradient algorithm
-----------------------------
-
-.. autoclass:: torch_numopt.conjugate_gradient.ConjugateGradient
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Gauss Newton algorithm
+Implemented algorithms
 ----------------------
 
-.. autoclass:: torch_numopt.gauss_newton_optim.GaussNewton
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+   :maxdepth: 2
 
-Gradient Descent with Line Search 
----------------------------------
-
-.. autoclass:: torch_numopt.gradient_descent_lineseach.GradientDescentLS
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Quasi-Newton
----------------------------------
-
-.. automodule:: torch_numopt.lbfgs_optim
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Levemberg-Marquardt algorithm
------------------------------
-
-.. autoclass:: torch_numopt.lm_optim.LM
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Newton Raphson algorithm
-----------------------------------
-
-.. autoclass:: torch_numopt.newton_optim.NewtonRaphson
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
+   torch_numopt.implemented_algorithms
 
 utils
 --------------------------
 
 .. automodule:: torch_numopt.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: torch_numopt
    :members:
    :undoc-members:
    :show-inheritance:

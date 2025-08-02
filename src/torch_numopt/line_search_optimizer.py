@@ -5,12 +5,43 @@ from .custom_optimizer import CustomOptimizer
 
 class LineSearchOptimizer(CustomOptimizer, ABC):
     """
-    Mixin to add a line search procedure to an optmization algorithm.
+    Base class for gradient-based optimization algorithms with line search.
     """
 
     @torch.enable_grad()
-    def accept_step(self, params, new_params, step_dir, lr, loss, new_loss, grad, c1, c2, line_search_cond):
-        """ """
+    def accept_step(
+        self,
+        params: list,
+        new_params: list,
+        step_dir: list,
+        lr: float,
+        loss: torch.Tensor,
+        new_loss: torch.Tensor,
+        grad: list,
+        c1: float,
+        c2: float,
+        line_search_cond: str,
+    ):
+        """
+        Compute one of the stopping conditions for line search methods.
+
+        Parameters
+        ----------
+        params: list
+        new_params: list
+        step_dir: list
+        lr: float
+        loss: torch.Tensor
+        new_loss: torch.Tensor
+        grad: list
+        c1: float
+        c2: float
+        line_search_cond: str
+
+        Returns
+        -------
+        accepted: bool
+        """
 
         accepted = True
 
@@ -39,8 +70,38 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
         return accepted
 
     @torch.enable_grad()
-    def backtrack(self, params, step_dir, grad, lr_init, eval_model, c1, c2, tau, line_search_cond="armijo"):
-        """ """
+    def backtrack(
+        self,
+        params: list,
+        step_dir: list,
+        grad: list,
+        lr_init: float,
+        eval_model: callable,
+        c1: float,
+        c2: float,
+        tau: float,
+        line_search_cond: str = "armijo",
+    ):
+        """
+        Perform backtracking line search.
+
+        Parameters
+        ----------
+
+        params: list
+        step_dir: list
+        grad: list
+        lr_init: float
+        eval_model: callable
+        c1: float
+        c2: float
+        tau: float
+        line_search_cond: str
+
+        Returns
+        -------
+        new_params: list
+        """
 
         lr = lr_init
 
@@ -125,9 +186,86 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
             new_loss = eval_model(*new_params)
 
         return new_params
+
     
-    def apply_gradients(self, lr, eval_model, params, d_p_list, h_list=None):
-        """ """
+    @torch.enable_grad()
+    def interpolate_quadratic(self, params, step_dir, grad, lr_init, eval_model, c1, c2, line_search_cond="armijo"):
+        dir_deriv = sum([torch.dot(p_grad.flatten(), p_step.flatten()) for p_grad, p_step in zip(grad, step_dir)])
+
+        loss = eval_model(*params)
+        lr = lr_init
+
+        new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
+        new_loss = eval_model(*new_params)
+
+        print()
+        while not self.accept_step(params, new_params, step_dir, lr, loss, new_loss, grad, c1, c2, line_search_cond):
+            print(lr)
+            if lr == 0:
+                break
+
+            lr = - 0.5 * (dir_deriv * lr ** 2) / (new_loss - loss - dir_deriv * lr)
+
+            new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
+            new_loss = eval_model(*new_params)
+
+        return new_params
+    
+    @torch.enable_grad()
+    def interpolate_cubic(self, params, step_dir, grad, lr_init, eval_model, c1, c2, line_search_cond="armijo"):
+        dir_deriv = sum([torch.dot(p_grad.flatten(), p_step.flatten()) for p_grad, p_step in zip(grad, step_dir)])
+
+        loss = eval_model(*params)
+        lr_0 = lr_init
+
+        # Calculate first interpolation point
+        prev_params = tuple(p - lr_0 * p_step for p, p_step in zip(params, step_dir))
+        prev_loss = eval_model(*prev_params)
+
+        if self.accept_step(params, prev_params, step_dir, lr_0, loss, prev_loss, grad, c1, c2, line_search_cond):
+            return prev_params
+        
+        # print()
+        # Calculate second interpolation point
+        lr_1 = - 0.5 * (dir_deriv * lr_0 ** 2) / (prev_loss - loss - dir_deriv * lr_0)
+        # print(lr_1)
+
+        new_params = tuple(p - lr_1 * p_step for p, p_step in zip(params, step_dir))
+        new_loss = eval_model(*new_params)
+
+        # print()
+        while not self.accept_step(params, new_params, step_dir, lr_1, loss, new_loss, grad, c1, c2, line_search_cond):
+            if lr_0 == 0 or lr_1 == 0 or lr_1 == lr_0:
+                break
+            factor =  1 / ((lr_0 * lr_1)**2 * (lr_1 - lr_0))
+            aux_mat = torch.Tensor([[lr_0**2, -lr_1**2], [-lr_0**3, lr_1**3]])
+            aux_vec = torch.Tensor([new_loss - loss - dir_deriv*lr_1, prev_loss - loss - dir_deriv*lr_0])
+            a, b = factor.cpu()*torch.matmul(aux_mat, aux_vec)
+            
+            lr_0 = lr_1
+            lr_1 = (-b + torch.sqrt(torch.abs(b**2 - 3*a*dir_deriv)))/(3*a)
+            # print(float(lr_0), float(lr_1), a, b, b**2 - 3*a*dir_deriv)
+
+            prev_loss = new_loss
+            new_params = tuple(p - lr_1 * p_step for p, p_step in zip(params, step_dir))
+            new_loss = eval_model(*new_params)
+
+        return new_params
+
+    def apply_gradients(self, lr: float, eval_model: callable, params: list, d_p_list: list, h_list: list = None):
+        """
+        Updates the parameters of the network using a direction and a step length.
+
+        Parameters
+        ----------
+
+        lr: float
+        eval_model: callable
+        params: list
+        d_p_list: list
+        h_list: list, optional
+
+        """
 
         step_dir = self.get_step_direction(d_p_list, h_list)
 
@@ -144,5 +282,20 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
             param.copy_(new_param)
 
     @abstractmethod
-    def get_step_direction(self, d_p_list, h_list):
-        pass
+    def get_step_direction(self, d_p_list: list, h_list: list):
+        """
+        Obtains the step direction used to update the network.
+
+        Parameters
+        ----------
+
+        d_p_list: list
+            List of gradients of the parameters.
+        h_list: list
+            List of Hessians of the parameters.
+
+        Returns
+        -------
+        p: list
+            New search direction
+        """

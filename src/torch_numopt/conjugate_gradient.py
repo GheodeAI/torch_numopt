@@ -67,7 +67,6 @@ class ConjugateGradient(LineSearchOptimizer):
         self.line_search_method = line_search_method
         self.line_search_cond = line_search_cond
 
-
     def get_step_direction(self, d_p_list, h_list=None):
         """ """
         if self.prev_dir is None:
@@ -98,18 +97,9 @@ class ConjugateGradient(LineSearchOptimizer):
         if closure is not None:
             raise NotImplementedError("This optimizer cannot handle closures.")
 
-        residual_fn = copy(loss_fn)
-        residual_fn.reduction = "none"
-
-        model_params = tuple(self._model.parameters())
-
         def eval_model(*input_params):
             out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
             return loss_fn(out, y)
-
-        def get_residuals(*input_params):
-            out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
-            return residual_fn(out, y)
 
         for group in self.param_groups:
             lr = group["lr"]

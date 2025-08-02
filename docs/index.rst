@@ -13,5 +13,6 @@ Implementation of numerical optimization methods for Neural Networks.
    :maxdepth: 2
    :caption: Contents:
 
-   modules
+   API reference <api_reference>
+   Documentation <torch_numopt>
 

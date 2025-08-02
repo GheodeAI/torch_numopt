@@ -22,6 +22,9 @@ class CustomOptimizer(Optimizer, ABC):
         """
         Method to update the parameters of the Neural Network.
 
+        Parameters
+        ----------
+
         x: torch.Tensor
             Inputs of the Neural Network.
         y: torch.Tensor
