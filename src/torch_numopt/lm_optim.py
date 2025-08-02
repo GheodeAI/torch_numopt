@@ -49,26 +49,22 @@ class LM(SecondOrderOptimizer):
         mu: float = 1,
         mu_dec: float = 0.1,
         mu_max: float = 1e10,
-        use_diagonal: bool = True,
+        fletcher: bool = False,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
         line_search_method: str = "const",
         line_search_cond: str = "armijo",
+        solver: str = "solve",
+        batch_size: int = None,
         **kwargs,
     ):
-        assert lr > 0, "Learning rate must be a positive number."
-
-        super().__init__(model.parameters(), {"lr": lr})
-
-        self._model = model
-        self._param_keys = dict(model.named_parameters()).keys()
-        self._params = self.param_groups[0]["params"]
+        super().__init__(model, lr=lr, batch_size=batch_size)
 
         self.mu = mu
         self.mu_dec = mu_dec
         self.mu_max = mu_max
-        self.use_diagonal = use_diagonal
+        self.fletcher = fletcher
 
         self.prev_loss = None
 
@@ -79,20 +75,29 @@ class LM(SecondOrderOptimizer):
         self.line_search_method = line_search_method
         self.line_search_cond = line_search_cond
 
+        self.solver = solver
+
+        if fletcher and solver == "solve":
+            warnings.warn("Using 'solve' with fletcher's method usually doesn't work very well. Try using 'pinv' instead.")
+
     def get_step_direction(self, d_p_list, h_list):
         dir_list = [None] * len(d_p_list)
         for i, (d_p, h) in enumerate(zip(d_p_list, h_list)):
-            if self.use_diagonal:
+            if self.fletcher:
                 h_adjusted = h + self.mu * h.diagonal()
-
-                # Use truncated SVD pseudoinverse to address numerical instability
-                h_i = pinv_svd_trunc(h_adjusted)
             else:
                 h_adjusted = h + self.mu * torch.eye(h.shape[0], device=h.device)
 
-                h_i = h_adjusted.pinverse()
+            match self.solver:
+                case "pinv":
+                    if self.fletcher:
+                        h_i = pinv_svd_trunc(h_adjusted)
+                    else:
+                        h_i = h_adjusted.pinverse()
 
-            d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
+                    d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
+                case "solve":
+                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(d_p.shape)
 
             dir_list[i] = d2_p
 
@@ -103,28 +108,17 @@ class LM(SecondOrderOptimizer):
         if closure is not None:
             raise NotImplementedError("This optimizer cannot handle closures.")
 
-        residual_fn = copy(loss_fn)
-        residual_fn.reduction = "none"
-
         model_params = tuple(self._model.parameters())
 
         def eval_model(*input_params):
             out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
             return loss_fn(out, y)
 
-        def get_residuals(*input_params):
-            out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
-            return residual_fn(out, y)
+        # Calculate approximate Hessian matrix
+        h_list = self.approx_hessian_gn(x, y, loss_fn, vectorize=True)
 
         for group in self.param_groups:
             lr = group["lr"]
-
-            # Calculate approximate Hessian matrix
-            j_list = torch.autograd.functional.jacobian(get_residuals, model_params, create_graph=False, vectorize=True)
-            h_list = [None] * len(j_list)
-            for j_idx, j in enumerate(j_list):
-                j = j.flatten(start_dim=1)
-                h_list[j_idx] = self._reshape_hessian(j.T @ j)
 
             # Calculte gradients
             params_with_grad = []

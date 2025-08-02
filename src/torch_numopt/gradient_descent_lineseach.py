@@ -9,8 +9,6 @@ from .custom_optimizer import CustomOptimizer
 
 class GradientDescentLS(LineSearchOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
-
     Parameters
     ----------
 
@@ -60,23 +58,8 @@ class GradientDescentLS(LineSearchOptimizer):
 
     @torch.no_grad()
     def step(self, x, y, loss_fn, closure=None):
-        """
-        Method to update the parameters of the Neural Network.
-
-        x: torch.Tensor
-            Inputs of the Neural Network.
-        y: torch.Tensor
-            Targets of the Neural Network.
-        loss_fn: callable
-            Loss function to be optimized.
-        closure: callable
-            Kept for compatibility, unused.
-        """
-
         if closure is not None:
             raise NotImplementedError("This optimizer cannot handle closures.")
-
-        model_params = tuple(self._model.parameters())
 
         def eval_model(*input_params):
             out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)

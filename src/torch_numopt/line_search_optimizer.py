@@ -5,12 +5,43 @@ from .custom_optimizer import CustomOptimizer
 
 class LineSearchOptimizer(CustomOptimizer, ABC):
     """
-    Mixin to add a line search procedure to an optmization algorithm.
+    Base class for gradient-based optimization algorithms with line search.
     """
 
     @torch.enable_grad()
-    def accept_step(self, params, new_params, step_dir, lr, loss, new_loss, grad, c1, c2, line_search_cond):
-        """ """
+    def accept_step(
+        self,
+        params: list,
+        new_params: list,
+        step_dir: list,
+        lr: float,
+        loss: torch.Tensor,
+        new_loss: torch.Tensor,
+        grad: list,
+        c1: float,
+        c2: float,
+        line_search_cond: str,
+    ):
+        """
+        Compute one of the stopping conditions for line search methods.
+
+        Parameters
+        ----------
+        params: list
+        new_params: list
+        step_dir: list
+        lr: float
+        loss: torch.Tensor
+        new_loss: torch.Tensor
+        grad: list
+        c1: float
+        c2: float
+        line_search_cond: str
+
+        Returns
+        -------
+        accepted: bool
+        """
 
         accepted = True
 
@@ -38,8 +69,38 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
 
         return accepted
 
-    def backtrack(self, params, step_dir, grad, lr_init, eval_model, c1, c2, tau, line_search_cond="armijo"):
-        """ """
+    def backtrack(
+        self,
+        params: list,
+        step_dir: list,
+        grad: list,
+        lr_init: float,
+        eval_model: callable,
+        c1: float,
+        c2: float,
+        tau: float,
+        line_search_cond: str = "armijo",
+    ):
+        """
+        Perform backtracking line search.
+
+        Parameters
+        ----------
+
+        params: list
+        step_dir: list
+        grad: list
+        lr_init: float
+        eval_model: callable
+        c1: float
+        c2: float
+        tau: float
+        line_search_cond: str
+
+        Returns
+        -------
+        new_params: list
+        """
 
         lr = lr_init
 
@@ -132,8 +193,20 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
 
         return new_params
 
-    def apply_gradients(self, lr, eval_model, params, d_p_list, h_list=None):
-        """ """
+    def apply_gradients(self, lr: float, eval_model: callable, params: list, d_p_list: list, h_list: list = None):
+        """
+        Updates the parameters of the network using a direction and a step length.
+
+        Parameters
+        ----------
+
+        lr: float
+        eval_model: callable
+        params: list
+        d_p_list: list
+        h_list: list, optional
+
+        """
 
         step_dir = self.get_step_direction(d_p_list, h_list)
 
@@ -150,5 +223,20 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
             param.copy_(new_param)
 
     @abstractmethod
-    def get_step_direction(self, d_p_list, h_list):
-        pass
+    def get_step_direction(self, d_p_list: list, h_list: list):
+        """
+        Obtains the step direction used to update the network.
+
+        Parameters
+        ----------
+
+        d_p_list: list
+            List of gradients of the parameters.
+        h_list: list
+            List of Hessians of the parameters.
+
+        Returns
+        -------
+        p: list
+            New search direction
+        """

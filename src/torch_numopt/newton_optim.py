@@ -25,6 +25,14 @@ class NewtonRaphson(SecondOrderOptimizer):
         Coefficient used in the second condition for wolfe conditions.
     tau: float
         Factor used to reduce the step size in each step of the backtracking line search.
+    damping: bool
+        Whether to use the diagonal of the Hessian matrix instead of an identity matrix to adjust the Hessian matrix.
+    mu: float
+        Initial value for the coefficient used when adding a diagonal matrix to the Hessian matrix.
+    mu_dec: float
+        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
+    mu_max: float
+        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
     line_search_method: str
         Method used for line search, options are "backtrack" and "constant".
     line_search_cond: str
@@ -38,17 +46,18 @@ class NewtonRaphson(SecondOrderOptimizer):
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
+        damping: str = "none",
+        mu: float = 1,
         line_search_method: str = "const",
         line_search_cond: str = "armijo",
+        solver: str = "solve",
+        batch_size: int = None,
         **kwargs,
     ):
-        assert lr > 0, "Learning rate must be a positive number."
+        super().__init__(model, lr=lr, batch_size=batch_size)
 
-        super().__init__(model.parameters(), {"lr": lr})
-
-        self._model = model
-        self._param_keys = dict(model.named_parameters()).keys()
-        self._params = self.param_groups[0]["params"]
+        self.mu = mu
+        self.damping = damping
 
         # Coefficients for the strong-wolfe conditions
         self.c1 = c1
@@ -57,15 +66,30 @@ class NewtonRaphson(SecondOrderOptimizer):
         self.line_search_method = line_search_method
         self.line_search_cond = line_search_cond
 
-    def get_step_direction(self, d_p_list, h_list):
-        dir_list = []
-        for d_p, h in zip(d_p_list, h_list):
-            # Handle issues with numerical stability
-            h = fix_stability(h)
-            h_i = h.pinverse()
+        self.solver = solver
 
-            d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
-            dir_list.append(d2_p)
+    def get_step_direction(self, d_p_list, h_list):
+        dir_list = [None] * len(d_p_list)
+        for i, (d_p, h) in enumerate(zip(d_p_list, h_list)):
+            match self.damping:
+                case True | "identity":
+                    h_adjusted = h + self.mu * torch.eye(h.shape[0], device=h.device)
+                case "fletcher":
+                    h_adjusted = h + self.mu * h.diagonal()
+                case _:
+                    h_adjusted = h
+
+            if torch.linalg.cond(h_adjusted) > 1e8:
+                h_adjusted = fix_stability(h_adjusted)
+
+            match self.solver:
+                case "pinv":
+                    h_i = h_adjusted.pinverse()
+                    d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
+                case "solve":
+                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(d_p.shape)
+
+            dir_list[i] = d2_p
 
         return dir_list
 
@@ -81,8 +105,7 @@ class NewtonRaphson(SecondOrderOptimizer):
             return loss_fn(out, y)
 
         # Calculate exact Hessian matrix
-        h_list = torch.autograd.functional.hessian(eval_model, model_params, create_graph=True, vectorize=True)
-        h_list = [self._reshape_hessian(h_list[i][i]) for i, _ in enumerate(h_list)]
+        h_list = self.exact_hessian(x, y, loss_fn, vectorize=True)
 
         for group in self.param_groups:
             lr = group["lr"]
