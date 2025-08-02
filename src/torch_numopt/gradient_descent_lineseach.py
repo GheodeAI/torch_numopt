@@ -9,8 +9,6 @@ from .custom_optimizer import CustomOptimizer
 
 class GradientDescentLS(LineSearchOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
-
     Parameters
     ----------
 

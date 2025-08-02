@@ -88,7 +88,7 @@ class AGD(SecondOrderOptimizer):
                         h_i = pinv_svd_trunc(h_adjusted)
                     else:
                         h_i = h_adjusted.pinverse()
-                    
+
                     d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
                 case "solve":
                     d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(d_p.shape)

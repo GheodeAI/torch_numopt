@@ -67,7 +67,6 @@ class ConjugateGradient(LineSearchOptimizer):
         self.line_search_method = line_search_method
         self.line_search_cond = line_search_cond
 
-
     def get_step_direction(self, d_p_list, h_list=None):
         """ """
         if self.prev_dir is None:
