@@ -10,7 +10,7 @@ import warnings
 from copy import deepcopy, copy
 
 
-class LM(SecondOrderOptimizer):
+class LevenbergMarquardtLS(SecondOrderOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
     and the matlab implementation of 'learnlm' https://es.mathworks.com/help/deeplearning/ref/trainlm.html#d126e69092

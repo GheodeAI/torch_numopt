@@ -9,7 +9,7 @@ from .utils import fix_stability, pinv_svd_trunc
 from copy import copy
 
 
-class GaussNewton(SecondOrderOptimizer):
+class GaussNewtonLS(SecondOrderOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
 

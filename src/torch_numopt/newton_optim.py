@@ -8,7 +8,7 @@ from .second_order_optimizer import SecondOrderOptimizer
 from .utils import fix_stability, pinv_svd_trunc
 
 
-class NewtonRaphson(SecondOrderOptimizer):
+class NewtonLS(SecondOrderOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
 

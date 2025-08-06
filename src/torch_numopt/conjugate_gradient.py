@@ -9,7 +9,7 @@ from copy import copy, deepcopy
 from .utils import param_reshape_like
 
 
-class ConjugateGradient(LineSearchOptimizer):
+class ConjugateGradientLS(LineSearchOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
     https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
