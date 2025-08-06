@@ -8,6 +8,7 @@ ls_conditions = ["armijo", "wolfe", "strong-wolfe", "goldstein"]
 lr_init_methods = ["scaled", "BB1", "BB2", "quadratic", "lipschitz", "keep", None]
 ls_methods = ["backtrack", "interpolate", "const"]
 
+
 class LineSearchOptimizer(CustomOptimizer, ABC):
     """
     Base class for gradient-based optimization algorithms with line search.
@@ -26,19 +27,21 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
 
     def __init__(
         self,
-        model:nn.Module,
-        lr:float,
-        lr_init: str = None,
+        model: nn.Module,
+        lr_init: float = 1,
+        lr_method: str = None,
         line_search_cond: str = "armijo",
         line_search_method: str = "const",
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
-
     ):
-        super().__init__(model.parameters(), {"lr": lr})
+        assert lr_init > 0, "Learning rate must be a positive number."
+
+        super().__init__(model.parameters(), {"lr": lr_init})
 
         self.lr_init = lr_init
+        self.lr_method = lr_method
         self.line_search_cond = line_search_cond
         self.line_search_method = line_search_method
         self.c1 = c1
@@ -49,6 +52,10 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
         self.prev_grad = None
         self.prev_step_dir = None
         self.prev_params = None
+
+        self._model = model
+        self._param_keys = dict(model.named_parameters()).keys()
+        self._params = self.param_groups[0]["params"]
 
     @torch.enable_grad()
     def accept_step(
@@ -107,9 +114,9 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
             case "goldstein":
                 accepted = loss + (1 - self.c1) * lr * dir_deriv <= new_loss <= loss + self.c1 * lr * dir_deriv
             case _:
-                ls_cond_str = ", ".join([f"\'{i}\'" if i is not None else "None" for i in ls_conditions])
+                ls_cond_str = ", ".join([f"'{i}'" if i is not None else "None" for i in ls_conditions])
                 last_comma_idx = ls_cond_str.rfind(",")
-                ls_cond_str = ls_cond_str[:last_comma_idx] + " or" + ls_cond_str[last_comma_idx+1:]
+                ls_cond_str = ls_cond_str[:last_comma_idx] + " or" + ls_cond_str[last_comma_idx + 1 :]
                 raise ValueError(f"Line search condition {line_search_cond} does not exist. Try {ls_cond_str}.")
 
         return accepted
@@ -159,16 +166,8 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
 
         return new_params, lr
 
-    
     @torch.enable_grad()
-    def interpolate_cubic(
-        self,
-        params: list,
-        step_dir: list,
-        grad: list,
-        lr_init: float,
-        eval_model: callable
-    ):
+    def interpolate_cubic(self, params: list, step_dir: list, grad: list, lr_init: float, eval_model: callable):
         """
 
         Parameters
@@ -194,9 +193,9 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
 
         if self.accept_step(params, prev_params, step_dir, lr_0, loss, prev_loss, grad, self.line_search_cond):
             return prev_params, lr_init
-        
+
         # Calculate second interpolation point
-        lr_1 = - 0.5 * (dir_deriv * lr_0 ** 2) / (prev_loss - loss - dir_deriv * lr_0 + eps)
+        lr_1 = -0.5 * (dir_deriv * lr_0**2) / (prev_loss - loss - dir_deriv * lr_0 + eps)
 
         new_params = tuple(p + lr_1 * p_step for p, p_step in zip(params, step_dir))
         new_loss = eval_model(*new_params)
@@ -206,20 +205,20 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
             if lr_0 == 0 or lr_1 == 0 or lr_1 == lr_0:
                 break
 
-            factor =  1 / ((lr_0 * lr_1)**2 * (lr_1 - lr_0) + eps)
-            aux_mat = torch.Tensor([[lr_0**2, -lr_1**2], [-lr_0**3, lr_1**3]], device=dir_deriv.device)
-            aux_vec = torch.Tensor([new_loss - loss - dir_deriv*lr_1, prev_loss - loss - dir_deriv*lr_0], device=dir_deriv.device)
-            a, b = factor*torch.matmul(aux_mat, aux_vec)
-            
+            factor = 1 / ((lr_0 * lr_1) ** 2 * (lr_1 - lr_0) + eps)
+            aux_mat = torch.Tensor([[lr_0**2, -(lr_1**2)], [-(lr_0**3), lr_1**3]], device=dir_deriv.device)
+            aux_vec = torch.Tensor([new_loss - loss - dir_deriv * lr_1, prev_loss - loss - dir_deriv * lr_0], device=dir_deriv.device)
+            a, b = factor * torch.matmul(aux_mat, aux_vec)
+
             lr_0 = lr_1
-            lr_1 = (-b + torch.sqrt(torch.abs(b**2 - 3*a*dir_deriv)))/(3*a + eps)
+            lr_1 = (-b + torch.sqrt(torch.abs(b**2 - 3 * a * dir_deriv))) / (3 * a + eps)
 
             prev_loss = new_loss
             new_params = tuple(p + lr_1 * p_step for p, p_step in zip(params, step_dir))
             new_loss = eval_model(*new_params)
 
         return new_params, -lr_1
-    
+
     def initialize_lr(self, lr: float, grad: list, step_dir: list, eval_model: callable, params: list):
         """
 
@@ -235,7 +234,7 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
 
         if self.prev_lr is None:
             return lr
-        
+
         grad_flat = torch.hstack([i.flatten() for i in grad])
         step_flat = torch.hstack([i.flatten() for i in step_dir])
         prev_grad_flat = torch.hstack([i.flatten() for i in self.prev_grad])
@@ -243,43 +242,35 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
 
         new_lr = None
         eps = torch.finfo(params[0].dtype).eps
-        match self.lr_init:
+        match self.lr_method:
             case "scaled":
-                new_lr = self.prev_lr * (prev_grad_flat @ prev_step_flat)/(grad_flat @ step_flat + eps)
+                new_lr = self.prev_lr_init * (prev_grad_flat @ prev_step_flat) / (grad_flat @ step_flat + eps)
             # Barzilai-Borwein
             case "BB1":
-                new_lr = (prev_step_flat @ prev_step_flat)/(prev_step_flat @ prev_grad_flat + eps)
+                new_lr = (prev_step_flat @ prev_step_flat) / (prev_step_flat @ prev_grad_flat + eps)
             case "BB2":
-                new_lr = (prev_step_flat @ prev_grad_flat)/(prev_grad_flat @ prev_grad_flat + eps)
+                new_lr = (prev_step_flat @ prev_grad_flat) / (prev_grad_flat @ prev_grad_flat + eps)
             case "quadratic":
                 loss = eval_model(*params)
-                new_lr = 2 * abs(loss-self.prev_loss)/(prev_grad_flat @ prev_step_flat + eps)
-                new_lr = min(1.01*new_lr, 1)
+                new_lr = 2 * abs(loss - self.prev_loss) / (prev_grad_flat @ prev_step_flat + eps)
+                new_lr = min(1.01 * new_lr, 1)
             case "lipschitz":
                 grad_dist = torch.norm(grad_flat - prev_grad_flat)
                 step_dist = torch.norm(step_flat - prev_step_flat)
-                new_lr = step_dist/(grad_dist+eps)
+                new_lr = step_dist / (grad_dist + eps)
             case "keep":
                 new_lr = self.prev_lr
             case None:
                 new_lr = lr
             case _:
-                lr_init_methods_str = ", ".join([f"\'{i}\'" if i is not None else "None" for i in lr_init_methods])
+                lr_init_methods_str = ", ".join([f"'{i}'" if i is not None else "None" for i in lr_init_methods])
                 last_comma_idx = lr_init_methods_str.rfind(",")
-                lr_init_methods_str = lr_init_methods_str[:last_comma_idx] + " or" + lr_init_methods_str[last_comma_idx+1:]
+                lr_init_methods_str = lr_init_methods_str[:last_comma_idx] + " or" + lr_init_methods_str[last_comma_idx + 1 :]
                 raise ValueError(f"Learning rate initialization method {self.lr_init} does not exist. Try {lr_init_methods_str}.")
 
         return new_lr
 
-
-    def apply_gradients(
-        self,
-        lr: float,
-        eval_model: callable,
-        params: list,
-        d_p_list: list,
-        h_list: list = None
-    ):
+    def apply_gradients(self, eval_model: callable, params: list, d_p_list: list, h_list: list = None):
         """
         Updates the parameters of the network using a direction and a step length.
 
@@ -295,22 +286,24 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
 
         step_dir = self.get_step_direction(d_p_list, h_list)
 
-        lr = self.initialize_lr(lr, d_p_list, step_dir, eval_model, params)
+        lr_init = self.initialize_lr(self.lr_init, d_p_list, step_dir, eval_model, params)
         match self.line_search_method:
             case "backtrack":
-                new_params, lr = self.backtrack(params, step_dir, d_p_list, lr, eval_model)
+                new_params, lr = self.backtrack(params, step_dir, d_p_list, lr_init, eval_model)
             case "interpolate":
-                new_params, lr = self.interpolate_cubic(params, step_dir, grad, lr, eval_model)
+                new_params, lr = self.interpolate_cubic(params, step_dir, grad, lr_init, eval_model)
             case "const":
+                lr = lr_init
                 new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
             case _:
-                ls_methods_str = ", ".join([f"\'{i}\'" if i is not None else "None" for i in ls_methods])
+                ls_methods_str = ", ".join([f"'{i}'" if i is not None else "None" for i in ls_methods])
                 last_comma_idx = ls_methods_str.rfind(",")
-                ls_methods_str = ls_methods_str[:last_comma_idx] + " or" + ls_methods_str[last_comma_idx+1:]
+                ls_methods_str = ls_methods_str[:last_comma_idx] + " or" + ls_methods_str[last_comma_idx + 1 :]
                 raise ValueError(f"Line search method {self.lr_init} does not exist. Try {ls_methods_str}.")
-        
+
         if self.lr_init is not None:
             self.prev_lr = lr
+            self.prev_lr_init = lr_init
             self.prev_params = params
             self.prev_step_dir = step_dir
             self.prev_grad = d_p_list

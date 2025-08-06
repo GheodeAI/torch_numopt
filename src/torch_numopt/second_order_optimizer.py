@@ -27,31 +27,25 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        lr: float,
-        lr_init: str = None,
+        lr_init: float,
+        lr_method: str = None,
         line_search_cond="armijo",
         line_search_method="const",
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
-        batch_size: int = None
+        batch_size: int = None,
     ):
-        assert lr > 0, "Learning rate must be a positive number."
-
         super().__init__(
             model,
-            lr=lr,
             lr_init=lr_init,
+            lr_method=lr_method,
             line_search_cond=line_search_cond,
             line_search_method=line_search_method,
             c1=c1,
             c2=c2,
             tau=tau,
         )
-
-        self._model = model
-        self._param_keys = dict(model.named_parameters()).keys()
-        self._params = self.param_groups[0]["params"]
 
         self.batch_size = batch_size
 
@@ -118,7 +112,7 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
         The approximate Hessian is calculated as the square of the Jacobian of the residual of every data point with respect to the parameters.
 
         Let the loss function be, for example the MSE:
-        
+
         :math:`\mathcal{L}(x,y;\\theta) = \sum^{N}_{i=1} (f(x_i; \\theta) - y_i)^2 = \sum^{N}_{i=1} r_i`
 
         Then the Jacobian of the residuals will be the matrix:
@@ -127,7 +121,7 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
 
         Then, we will approximate the hessian as the product of the Jacobian with it's transpose, noting that the result
         will be a square matrix with size :math:`p\\times p` with :math:`p` being the number of parameters of the model:
-        
+
         :math:`H_{\\theta}[\mathcal{L}] \\approx J_{\\theta}[\mathcal{L}]^{\intercal} \cdot J_{\\theta}[\mathcal{L}]`
 
         Parameters

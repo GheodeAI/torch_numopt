@@ -14,9 +14,9 @@ class GradientDescentLS(LineSearchOptimizer):
 
     model: nn.Module
         The model to be optimized
-    lr: float
+    lr_init: float
         Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_init: str
+    lr_method: str
         Method to use to initialize the learning rate before applying line search.
     c1: float
         Coefficient of the sufficient increase condition in backtracking line search.
@@ -33,21 +33,20 @@ class GradientDescentLS(LineSearchOptimizer):
     def __init__(
         self,
         model: nn.Module,
-        lr: float = 1,
-        lr_init: str = None,
+        lr_init: float = 1,
+        lr_method: str = None,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
-        line_search_method: str = "const",
+        line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         **kwargs,
     ):
-        assert lr > 0, "Learning rate must be a positive number."
 
         super().__init__(
             model,
-            lr=lr,
             lr_init=lr_init,
+            lr_method=lr_method,
             line_search_cond=line_search_cond,
             line_search_method=line_search_method,
             c1=c1,
@@ -55,31 +54,16 @@ class GradientDescentLS(LineSearchOptimizer):
             tau=tau,
         )
 
-        self._model = model
-        self._param_keys = dict(model.named_parameters()).keys()
-        self._params = self.param_groups[0]["params"]
-
-        self.c1 = c1
-        self.c2 = c2
-        self.tau = tau
-        self.line_search_method = line_search_method
-        self.line_search_cond = line_search_cond
-
     def get_step_direction(self, d_p_list, h_list):
         return d_p_list
 
     @torch.no_grad()
-    def step(self, x, y, loss_fn, closure=None):
-        if closure is not None:
-            raise NotImplementedError("This optimizer cannot handle closures.")
-
+    def step(self, x, y, loss_fn):
         def eval_model(*input_params):
             out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
             return loss_fn(out, y)
 
         for group in self.param_groups:
-            lr = group["lr"]
-
             # Calculate gradients
             params_with_grad = []
             d_p_list = []
@@ -88,4 +72,4 @@ class GradientDescentLS(LineSearchOptimizer):
                     params_with_grad.append(p)
                     d_p_list.append(p.grad)
 
-            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, lr=lr, eval_model=eval_model)
+            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, eval_model=eval_model)

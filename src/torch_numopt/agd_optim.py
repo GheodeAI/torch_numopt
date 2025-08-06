@@ -52,15 +52,15 @@ class AGD(SecondOrderOptimizer):
     def __init__(
         self,
         model: nn.Module,
-        lr: float,
-        lr_init = None,
-        mu: float = 1,
+        lr_init: float = 1,
+        lr_method: str = None,
+        mu: float = 0.001,
         radius: float = 1000,
         fletcher: bool = False,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
-        line_search_method: str = "const",
+        line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         solver: str = "solve",
         batch_size: int = None,
@@ -68,14 +68,14 @@ class AGD(SecondOrderOptimizer):
     ):
         super().__init__(
             model,
-            lr=lr,
             lr_init=lr_init,
+            lr_method=lr_method,
             line_search_cond=line_search_cond,
             line_search_method=line_search_method,
             c1=c1,
             c2=c2,
             tau=tau,
-            batch_size=batch_size
+            batch_size=batch_size,
         )
 
         self.radius = radius
@@ -86,7 +86,7 @@ class AGD(SecondOrderOptimizer):
     def get_step_direction(self, d_p_list, h_list):
         dir_list = [None] * len(d_p_list)
         for i, (d_p, h) in enumerate(zip(d_p_list, h_list)):
-            mu = torch.linalg.vector_norm(d_p)/self.radius
+            mu = torch.linalg.vector_norm(d_p) / self.radius
 
             if self.fletcher:
                 h_adjusted = h + mu * h.diagonal()
@@ -109,12 +109,7 @@ class AGD(SecondOrderOptimizer):
         return dir_list
 
     @torch.no_grad()
-    def step(self, x, y, loss_fn, closure=None):
-        if closure is not None:
-            raise NotImplementedError("This optimizer cannot handle closures.")
-
-        model_params = tuple(self._model.parameters())
-
+    def step(self, x, y, loss_fn):
         def eval_model(*input_params):
             out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
             return loss_fn(out, y)
@@ -123,8 +118,6 @@ class AGD(SecondOrderOptimizer):
         h_list = self.exact_hessian(x, y, loss_fn, vectorize=True)
 
         for group in self.param_groups:
-            lr = group["lr"]
-
             # Calculate gradients
             params_with_grad = []
             d_p_list = []
@@ -133,4 +126,4 @@ class AGD(SecondOrderOptimizer):
                     params_with_grad.append(p)
                     d_p_list.append(p.grad)
 
-            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, h_list=h_list, lr=lr, eval_model=eval_model)
+            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, h_list=h_list, eval_model=eval_model)

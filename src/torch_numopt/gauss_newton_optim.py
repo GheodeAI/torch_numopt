@@ -41,12 +41,12 @@ class GaussNewton(SecondOrderOptimizer):
     def __init__(
         self,
         model: nn.Module,
-        lr: float = 1,
-        lr_init = None,
+        lr_init: float = 1,
+        lr_method: str = None,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
-        line_search_method: str = "const",
+        line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         solver: str = "solve",
         batch_size: int = None,
@@ -54,22 +54,15 @@ class GaussNewton(SecondOrderOptimizer):
     ):
         super().__init__(
             model,
-            lr=lr,
             lr_init=lr_init,
+            lr_method=lr_method,
             line_search_cond=line_search_cond,
             line_search_method=line_search_method,
             c1=c1,
             c2=c2,
             tau=tau,
-            batch_size=batch_size
+            batch_size=batch_size,
         )
-
-        # Coefficients for the strong-wolfe conditions
-        self.c1 = c1
-        self.c2 = c2
-        self.tau = tau
-        self.line_search_method = line_search_method
-        self.line_search_cond = line_search_cond
 
         self.solver = solver
 
@@ -91,12 +84,7 @@ class GaussNewton(SecondOrderOptimizer):
         return dir_list
 
     @torch.no_grad()
-    def step(self, x, y, loss_fn, closure=None):
-        if closure is not None:
-            raise NotImplementedError("This optimizer cannot handle closures.")
-
-        model_params = tuple(self._model.parameters())
-
+    def step(self, x, y, loss_fn):
         def eval_model(*input_params):
             out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
             return loss_fn(out, y)
@@ -105,8 +93,6 @@ class GaussNewton(SecondOrderOptimizer):
         h_list = self.approx_hessian_gn(x, y, loss_fn, vectorize=True)
 
         for group in self.param_groups:
-            lr = group["lr"]
-
             # Calculte gradients
             params_with_grad = []
             d_p_list = []
@@ -115,4 +101,4 @@ class GaussNewton(SecondOrderOptimizer):
                     params_with_grad.append(p)
                     d_p_list.append(p.grad)
 
-            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, h_list=h_list, lr=lr, eval_model=eval_model)
+            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, h_list=h_list, eval_model=eval_model)

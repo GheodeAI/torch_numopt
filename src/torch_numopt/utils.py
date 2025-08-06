@@ -4,6 +4,7 @@ import torch
 def param_sizes(params: list):
     return [i.shape for i in params]
 
+
 def fix_stability(mat: torch.Tensor):
     """
     Procedure to adjust a matrix by adding a very small value to the diagonal to avoid numerical
