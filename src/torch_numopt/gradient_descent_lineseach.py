@@ -16,6 +16,8 @@ class GradientDescentLS(LineSearchOptimizer):
         The model to be optimized
     lr: float
         Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
+    lr_init: str
+        Method to use to initialize the learning rate before applying line search.
     c1: float
         Coefficient of the sufficient increase condition in backtracking line search.
     c2: float
@@ -31,7 +33,8 @@ class GradientDescentLS(LineSearchOptimizer):
     def __init__(
         self,
         model: nn.Module,
-        lr: float,
+        lr: float = 1,
+        lr_init: str = None,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
@@ -41,7 +44,16 @@ class GradientDescentLS(LineSearchOptimizer):
     ):
         assert lr > 0, "Learning rate must be a positive number."
 
-        super().__init__(model.parameters(), {"lr": lr})
+        super().__init__(
+            model,
+            lr=lr,
+            lr_init=lr_init,
+            line_search_cond=line_search_cond,
+            line_search_method=line_search_method,
+            c1=c1,
+            c2=c2,
+            tau=tau,
+        )
 
         self._model = model
         self._param_keys = dict(model.named_parameters()).keys()

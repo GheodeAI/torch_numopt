@@ -19,6 +19,8 @@ class NewtonRaphson(SecondOrderOptimizer):
         The model to be optimized
     lr: float
         Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
+    lr_init: str
+        Method to use to initialize the learning rate before applying line search.
     c1: float
         Coefficient of the sufficient increase condition in backtracking line search.
     c2: float
@@ -37,12 +39,17 @@ class NewtonRaphson(SecondOrderOptimizer):
         Method used for line search, options are "backtrack" and "constant".
     line_search_cond: str
         Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
+    solver: str
+        Method to use to invert the hessian.
+    batch_size: int
+        Size of the amount of data to use at a time to calculate the hessian matrix.
     """
 
     def __init__(
         self,
         model: nn.Module,
-        lr: float,
+        lr: float = 1,
+        lr_init: str = None,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
@@ -54,7 +61,17 @@ class NewtonRaphson(SecondOrderOptimizer):
         batch_size: int = None,
         **kwargs,
     ):
-        super().__init__(model, lr=lr, batch_size=batch_size)
+        super().__init__(
+            model,
+            lr=lr,
+            lr_init=lr_init,
+            line_search_cond=line_search_cond,
+            line_search_method=line_search_method,
+            c1=c1,
+            c2=c2,
+            tau=tau,
+            batch_size=batch_size
+        )
 
         self.mu = mu
         self.damping = damping
@@ -63,8 +80,6 @@ class NewtonRaphson(SecondOrderOptimizer):
         self.c1 = c1
         self.c2 = c2
         self.tau = tau
-        self.line_search_method = line_search_method
-        self.line_search_cond = line_search_cond
 
         self.solver = solver
 

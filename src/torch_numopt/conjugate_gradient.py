@@ -21,6 +21,8 @@ class ConjugateGradient(LineSearchOptimizer):
         The model to be optimized
     lr: float
         Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
+    lr_init: str
+        Method to use to initialize the learning rate before applying line search.
     c1: float
         Coefficient of the sufficient increase condition in backtracking line search.
     c2: float
@@ -38,7 +40,8 @@ class ConjugateGradient(LineSearchOptimizer):
     def __init__(
         self,
         model: nn.Module,
-        lr: float,
+        lr: float = 1,
+        lr_init: str = None,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
@@ -49,7 +52,16 @@ class ConjugateGradient(LineSearchOptimizer):
     ):
         assert lr > 0, "Learning rate must be a positive number."
 
-        super().__init__(model.parameters(), {"lr": lr})
+        super().__init__(
+            model,
+            lr=lr,
+            lr_init=lr_init,
+            line_search_cond=line_search_cond,
+            line_search_method=line_search_method,
+            c1=c1,
+            c2=c2,
+            tau=tau,
+        )
 
         self._model = model
         self._param_keys = dict(model.named_parameters()).keys()
@@ -64,8 +76,6 @@ class ConjugateGradient(LineSearchOptimizer):
         self.c1 = c1
         self.c2 = c2
         self.tau = tau
-        self.line_search_method = line_search_method
-        self.line_search_cond = line_search_cond
 
     def get_step_direction(self, d_p_list, h_list=None):
         """ """
@@ -74,16 +84,19 @@ class ConjugateGradient(LineSearchOptimizer):
 
         next_grad = [None] * len(d_p_list)
         for idx, (res, prev_res) in enumerate(zip(d_p_list, self.prev_dir)):
+            eps = torch.finfo(res.dtype).eps
             res = res.view((-1, 1))
             prev_res = prev_res.view((-1, 1))
 
             match cg_method:
                 case "FR":
-                    beta = (res.T @ res) / (prev_res.T @ prev_res)
+                    beta = (res.T @ res) / (prev_res.T @ prev_res + eps)
                 case "PR":
-                    beta = (res.T @ (res - prev_res)) / (prev_res.T @ prev_res)
+                    beta = (res.T @ (res - prev_res)) / (prev_res.T @ prev_res + eps)
                 case "PRP+":
-                    beta = torch.relu((res.T @ (res - prev_res)) / (prev_res.T @ prev_res))
+                    beta = torch.relu((res.T @ (res - prev_res)) / (prev_res.T @ prev_res + eps))
+                case _:
+                    raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+'.")
 
             res_reshaped = res.view(next_grad[idx].shape)
             next_grad[idx].add_(res_reshaped, alpha=-beta)
