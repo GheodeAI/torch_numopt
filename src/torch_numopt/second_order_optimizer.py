@@ -11,16 +11,41 @@ from copy import copy
 class SecondOrderOptimizer(LineSearchOptimizer, ABC):
     """
     Class for Optimization methods using second derivative information.
+
+    Parameters
+    ----------
+    model: nn.Module
+        The model to be optimized
+    lr_init: float
+        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
+    lr_method: str
+        Method to use to initialize the learning rate before applying line search.
+    batch_size: int
+        Size of the amount of data to use at a time to calculate the hessian matrix.
     """
 
-    def __init__(self, model: nn.Module, lr: float, batch_size: int = None):
-        assert lr > 0, "Learning rate must be a positive number."
-
-        super().__init__(model.parameters(), {"lr": lr})
-
-        self._model = model
-        self._param_keys = dict(model.named_parameters()).keys()
-        self._params = self.param_groups[0]["params"]
+    def __init__(
+        self,
+        model: nn.Module,
+        lr_init: float,
+        lr_method: str = None,
+        line_search_cond="armijo",
+        line_search_method="const",
+        c1: float = 1e-4,
+        c2: float = 0.9,
+        tau: float = 0.1,
+        batch_size: int = None,
+    ):
+        super().__init__(
+            model,
+            lr_init=lr_init,
+            lr_method=lr_method,
+            line_search_cond=line_search_cond,
+            line_search_method=line_search_method,
+            c1=c1,
+            c2=c2,
+            tau=tau,
+        )
 
         self.batch_size = batch_size
 
@@ -54,7 +79,7 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
             return loss_fn(out, y)
 
         # Calculate exact Hessian matrix
-        if self.batch_size is None:
+        if self.batch_size is None or self.batch_size >= len(x):
             # Calculate hessian with every sample in the dataset
             eval_model = lambda *p: eval_model_batch(x, y, *p)
             h_list = torch.autograd.functional.hessian(eval_model, model_params, create_graph=True, vectorize=vectorize)
@@ -87,7 +112,7 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
         The approximate Hessian is calculated as the square of the Jacobian of the residual of every data point with respect to the parameters.
 
         Let the loss function be, for example the MSE:
-        
+
         :math:`\mathcal{L}(x,y;\\theta) = \sum^{N}_{i=1} (f(x_i; \\theta) - y_i)^2 = \sum^{N}_{i=1} r_i`
 
         Then the Jacobian of the residuals will be the matrix:
@@ -96,7 +121,7 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
 
         Then, we will approximate the hessian as the product of the Jacobian with it's transpose, noting that the result
         will be a square matrix with size :math:`p\\times p` with :math:`p` being the number of parameters of the model:
-        
+
         :math:`H_{\\theta}[\mathcal{L}] \\approx J_{\\theta}[\mathcal{L}]^{\intercal} \cdot J_{\\theta}[\mathcal{L}]`
 
         Parameters
@@ -122,7 +147,7 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
             return residual_fn(out, y)
 
         # Calculate approximate Hessian matrix
-        if self.batch_size is None:
+        if self.batch_size is None or self.batch_size >= len(x):
             get_residuals = lambda *p: get_residuals_batch(x, y, *p)
             j_list = torch.autograd.functional.jacobian(get_residuals, model_params, create_graph=False, vectorize=vectorize)
             h_list = [None] * len(j_list)

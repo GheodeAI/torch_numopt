@@ -20,8 +20,10 @@ class LM(SecondOrderOptimizer):
 
     model: nn.Module
         The model to be optimized
-    lr: float
+    lr_init: float
         Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
+    lr_method: str
+        Method to use to initialize the learning rate before applying line search.
     mu: float
         Initial value for the coefficient used when adding a diagonal matrix to the Hessian approximation.
     mu_dec: float
@@ -40,40 +42,47 @@ class LM(SecondOrderOptimizer):
         Method used for line search, options are "backtrack" and "constant".
     line_search_cond: str
         Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
+    solver: str
+        Method to use to invert the hessian.
+    batch_size: int
+        Size of the amount of data to use at a time to calculate the hessian matrix.
     """
 
     def __init__(
         self,
         model: nn.Module,
-        lr: float,
-        mu: float = 1,
+        lr_init: float = 1,
+        lr_method: str = None,
+        mu: float = 0.001,
         mu_dec: float = 0.1,
         mu_max: float = 1e10,
         fletcher: bool = False,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
-        line_search_method: str = "const",
+        line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         solver: str = "solve",
         batch_size: int = None,
         **kwargs,
     ):
-        super().__init__(model, lr=lr, batch_size=batch_size)
+        super().__init__(
+            model,
+            lr_init=lr_init,
+            lr_method=lr_method,
+            line_search_cond=line_search_cond,
+            line_search_method=line_search_method,
+            c1=c1,
+            c2=c2,
+            tau=tau,
+            batch_size=batch_size,
+        )
 
         self.mu = mu
         self.mu_dec = mu_dec
         self.mu_max = mu_max
         self.fletcher = fletcher
-
         self.prev_loss = None
-
-        # Coefficients for the strong-wolfe conditions
-        self.c1 = c1
-        self.c2 = c2
-        self.tau = tau
-        self.line_search_method = line_search_method
-        self.line_search_cond = line_search_cond
 
         self.solver = solver
 
@@ -104,12 +113,7 @@ class LM(SecondOrderOptimizer):
         return dir_list
 
     @torch.no_grad()
-    def step(self, x, y, loss_fn, closure=None):
-        if closure is not None:
-            raise NotImplementedError("This optimizer cannot handle closures.")
-
-        model_params = tuple(self._model.parameters())
-
+    def step(self, x, y, loss_fn):
         def eval_model(*input_params):
             out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
             return loss_fn(out, y)
@@ -118,8 +122,6 @@ class LM(SecondOrderOptimizer):
         h_list = self.approx_hessian_gn(x, y, loss_fn, vectorize=True)
 
         for group in self.param_groups:
-            lr = group["lr"]
-
             # Calculte gradients
             params_with_grad = []
             d_p_list = []
@@ -128,7 +130,7 @@ class LM(SecondOrderOptimizer):
                     params_with_grad.append(p)
                     d_p_list.append(p.grad)
 
-            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, h_list=h_list, lr=lr, eval_model=eval_model)
+            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, h_list=h_list, eval_model=eval_model)
 
     def update(self, loss):
         loss_val = loss.detach().item()
