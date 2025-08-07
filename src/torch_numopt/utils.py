@@ -4,6 +4,18 @@ import torch
 def param_sizes(params: list):
     return [i.shape for i in params]
 
+def param_reshape_like(params_flat: torch.Tensor, params: list):
+    result = []
+    acc1 = 0
+    acc2 = 0
+    for p in params:
+        flat_size = int(p.flatten().shape[0])
+        acc2 += flat_size
+        result.append(params_flat[acc1:acc2].reshape(p.shape))
+        acc1 += flat_size
+    
+    return result
+
 
 def fix_stability(mat: torch.Tensor):
     """

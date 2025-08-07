@@ -8,7 +8,7 @@ from .second_order_optimizer import SecondOrderOptimizer
 from .utils import fix_stability, pinv_svd_trunc
 
 
-class NewtonRaphson(SecondOrderOptimizer):
+class NewtonLS(SecondOrderOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
 
@@ -17,9 +17,9 @@ class NewtonRaphson(SecondOrderOptimizer):
 
     model: nn.Module
         The model to be optimized
-    lr: float
+    lr_init: float
         Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_init: str
+    lr_method: str
         Method to use to initialize the learning rate before applying line search.
     c1: float
         Coefficient of the sufficient increase condition in backtracking line search.

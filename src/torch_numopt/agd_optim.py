@@ -9,7 +9,7 @@ from .utils import fix_stability, pinv_svd_trunc
 import warnings
 
 
-class AGD(SecondOrderOptimizer):
+class AGDLS(SecondOrderOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
     and the matlab implementation of 'learnlm' https://es.mathworks.com/help/deeplearning/ref/trainlm.html#d126e69092
@@ -21,9 +21,9 @@ class AGD(SecondOrderOptimizer):
 
     model: nn.Module
         The model to be optimized
-    lr: float
+    lr_init: float
         Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_init: str
+    lr_method: str
         Method to use to initialize the learning rate before applying line search.
     mu: float
         Initial value for the coefficient used when adding a diagonal matrix to the Hessian matrix.

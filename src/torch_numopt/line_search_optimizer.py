@@ -16,8 +16,10 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
     Parameters
     ----------
     model: nn.Module
-    lr: float
-    lr_init: str (optional)
+    lr_init: float
+        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
+    lr_method: str
+        Method to use to initialize the learning rate before applying line search.
     line_search_cond: str (optional)
     line_search_method: str (optional)
     c1: float (optional)
@@ -191,7 +193,7 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
         prev_params = tuple(p + lr_0 * p_step for p, p_step in zip(params, step_dir))
         prev_loss = eval_model(*prev_params)
 
-        if self.accept_step(params, prev_params, step_dir, lr_0, loss, prev_loss, grad, self.line_search_cond):
+        if self.accept_step(params, prev_params, step_dir, lr_0, loss, prev_loss, grad):
             return prev_params, lr_init
 
         # Calculate second interpolation point
@@ -201,7 +203,7 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
         new_loss = eval_model(*new_params)
 
         # Cubic interpolation with new calculated point
-        while not self.accept_step(params, new_params, step_dir, lr_1, loss, new_loss, grad, self.line_search_cond):
+        while not self.accept_step(params, new_params, step_dir, lr_1, loss, new_loss, grad):
             if lr_0 == 0 or lr_1 == 0 or lr_1 == lr_0:
                 break
 
@@ -218,6 +220,42 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
             new_loss = eval_model(*new_params)
 
         return new_params, -lr_1
+
+    # new_params = self.bisect_search(params, step_dir, d_p_list, lr_init, eval_model)
+    def bisect_search(self, params, step_dir, d_p_list, lr_init, eval_model):
+        new_params, lr = self.bisect(params, step_dir, lr_init, eval_model)
+        return new_params, lr
+    
+    @torch.enable_grad()
+    def bisect(self, params, step_dir, lr_init, eval_model, iter_max=1000, tol=1e-5):
+
+        lr = lr_init
+        a_min = 0
+        a_max = lr
+
+        new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
+        new_loss = eval_model(*new_params)
+        new_grad = torch.autograd.grad(new_loss, new_params)
+        new_dir_deriv = sum([torch.dot(p_grad.flatten(), p_step.flatten()) for p_grad, p_step in zip(new_grad, step_dir)])
+
+        for _ in range(iter_max):
+            if torch.abs(new_dir_deriv) < tol or a_max == a_min:
+                break
+
+            lr = 0.5*(a_max + a_min)
+
+            if new_dir_deriv < 0:
+                a_max = lr
+            elif new_dir_deriv > 0:
+                a_min = lr
+
+            new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
+            new_loss = eval_model(*new_params)
+
+            new_grad = torch.autograd.grad(new_loss, new_params)
+            new_dir_deriv = sum([torch.dot(p_grad.flatten(), p_step.flatten()) for p_grad, p_step in zip(new_grad, step_dir)])
+
+        return new_params, lr
 
     def initialize_lr(self, lr: float, grad: list, step_dir: list, eval_model: callable, params: list):
         """
@@ -285,13 +323,15 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
         """
 
         step_dir = self.get_step_direction(d_p_list, h_list)
-
         lr_init = self.initialize_lr(self.lr_init, d_p_list, step_dir, eval_model, params)
+
         match self.line_search_method:
             case "backtrack":
                 new_params, lr = self.backtrack(params, step_dir, d_p_list, lr_init, eval_model)
             case "interpolate":
-                new_params, lr = self.interpolate_cubic(params, step_dir, grad, lr_init, eval_model)
+                new_params, lr = self.interpolate_cubic(params, step_dir, d_p_list, lr_init, eval_model)
+            case "bisect":
+                new_params, lr = self.bisect_search(params, step_dir, d_p_list, lr_init, eval_model)
             case "const":
                 lr = lr_init
                 new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
@@ -301,13 +341,12 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
                 ls_methods_str = ls_methods_str[:last_comma_idx] + " or" + ls_methods_str[last_comma_idx + 1 :]
                 raise ValueError(f"Line search method {self.lr_init} does not exist. Try {ls_methods_str}.")
 
-        if self.lr_init is not None:
-            self.prev_lr = lr
-            self.prev_lr_init = lr_init
-            self.prev_params = params
-            self.prev_step_dir = step_dir
-            self.prev_grad = d_p_list
-            self.prev_loss = eval_model(*params)
+        self.prev_lr = lr
+        self.prev_lr_init = lr_init
+        self.prev_params = params
+        self.prev_step_dir = step_dir
+        self.prev_grad = d_p_list
+        self.prev_loss = eval_model(*params)
 
         # Apply new parameters
         for param, new_param in zip(params, new_params):

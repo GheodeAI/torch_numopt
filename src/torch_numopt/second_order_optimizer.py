@@ -16,9 +16,9 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
     ----------
     model: nn.Module
         The model to be optimized
-    lr: float
+    lr_init: float
         Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_init: str
+    lr_method: str
         Method to use to initialize the learning rate before applying line search.
     batch_size: int
         Size of the amount of data to use at a time to calculate the hessian matrix.

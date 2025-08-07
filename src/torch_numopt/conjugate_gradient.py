@@ -5,10 +5,11 @@ import torch.nn as nn
 from torch.func import functional_call
 from .line_search_optimizer import LineSearchOptimizer
 from .custom_optimizer import CustomOptimizer
-from copy import copy
+from copy import copy, deepcopy
+from .utils import param_reshape_like
 
 
-class ConjugateGradient(LineSearchOptimizer):
+class ConjugateGradientLS(LineSearchOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
     https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
@@ -62,36 +63,40 @@ class ConjugateGradient(LineSearchOptimizer):
         )
 
         # Conjugate gradient memory
-        self.prev_dir = None
         self.cg_method = cg_method
 
     def get_step_direction(self, d_p_list, h_list=None):
         """ """
-        if self.prev_dir is None:
+
+        if self.prev_grad is None:
             return d_p_list
 
-        next_grad = [None] * len(d_p_list)
-        for idx, (res, prev_res) in enumerate(zip(d_p_list, self.prev_dir)):
-            eps = torch.finfo(res.dtype).eps
-            res = res.view((-1, 1))
-            prev_res = prev_res.view((-1, 1))
+        grad = torch.hstack([i.flatten() for i in d_p_list])
+        prev_grad = torch.hstack([i.flatten() for i in self.prev_grad])
+        prev_step = torch.hstack([i.flatten() for i in self.prev_step_dir])
 
-            match cg_method:
-                case "FR":
-                    beta = (res.T @ res) / (prev_res.T @ prev_res + eps)
-                case "PR":
-                    beta = (res.T @ (res - prev_res)) / (prev_res.T @ prev_res + eps)
-                case "PRP+":
-                    beta = torch.relu((res.T @ (res - prev_res)) / (prev_res.T @ prev_res + eps))
-                case _:
-                    raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+'.")
+        res = -grad
+        prev_res = -prev_grad
+        
+        eps = torch.finfo(res.dtype).eps
+        match self.cg_method:
+            case "FR":
+                beta = torch.dot(res, res) / (torch.dot(prev_res, prev_res) + eps)
+            case "PR":
+                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
+            case "PRP+":
+                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
+                beta = torch.relu(beta)
+            case "HS":
+                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_step, res - prev_res) + eps)  
+            case "DY":
+                beta = torch.dot(res, res) / (torch.dot(-prev_step, res - prev_res) + eps)
+            case _:
+                raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'.")
 
-            res_reshaped = res.view(next_grad[idx].shape)
-            next_grad[idx].add_(res_reshaped, alpha=-beta)
-
-        self.prev_dir = next_grad
-
-        return next_grad
+        # Invert sign since we update the weights like x - lr*step
+        next_dir = param_reshape_like(grad - beta * res , d_p_list)
+        return next_dir
 
     @torch.no_grad()
     def step(self, x, y, loss_fn):
