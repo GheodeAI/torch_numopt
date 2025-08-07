@@ -12,7 +12,8 @@ Due to computational constraints, methods like Newton-Raphson or Levenberg-Marqu
 
 ## References
 [relevant paper](https://iopscience.iop.org/article/10.1088/1757-899X/495/1/012003/pdf)
-Approximate Greatest Descent is a waste of time, the author of the method is shared with the author of the review paper. It is also a bit badly written. It's just a Newton's method with damping on the hessian and a trust region method to calculate $\mu$, works well, but it's not very interesting.
+
+Note: Approximate Greatest Descent is a waste of time, the author of the method is shared with the author of the review paper. It is also a bit badly written. It's just a Newton's method with damping on the hessian and a trust region method to calculate $\mu$, works well, but it's not very interesting.
 
 
 ## Planned optimizers
@@ -20,7 +21,6 @@ Approximate Greatest Descent is a waste of time, the author of the method is sha
 - [x] Newton-Raphson
 - [x] Gauss-Newton
 - [x] Levenberg-Marquard (LM)
-- [x] ~~Approximate Greatest Descent (AGD)~~
 - [x] Stochastic Gradient Descent with Line Search
 - [x] Conjugate Gradient
 - [ ] Quasi-Newton (LBFGS already in pytorch)
