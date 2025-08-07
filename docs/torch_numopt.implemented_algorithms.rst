@@ -9,42 +9,34 @@ Gradient Descent with Line Search
    :undoc-members:
    :show-inheritance:
 
-Newton Raphson algorithm
+Newton's method with Line Search
 ----------------------------------
 
-.. autoclass:: torch_numopt.newton_optim.NewtonRaphson
+.. autoclass:: torch_numopt.newton_optim.NewtonLS
    :members:
    :undoc-members:
    :show-inheritance:
 
-Gauss Newton algorithm
+Gauss-Newton algorithm with Line Search
 ----------------------
 
-.. autoclass:: torch_numopt.gauss_newton_optim.GaussNewton
+.. autoclass:: torch_numopt.gauss_newton_optim.GaussNewtonLS
    :members:
    :undoc-members:
    :show-inheritance:
 
-Levemberg-Marquardt algorithm
+Levemberg-Marquardt algorithm with Line Search
 -----------------------------
 
-.. autoclass:: torch_numopt.lm_optim.LM
+.. autoclass:: torch_numopt.lm_optim.LevembergMarquardt
    :members:
    :undoc-members:
    :show-inheritance:
 
-AGD (Approximate Greatest Descent) algorithm
---------------------------------------------
-
-.. autoclass:: torch_numopt.agd_optim.AGD
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Conjugate Gradient algorithm
+Conjugate Gradient algorithm with Line Search
 ----------------------------
 
-.. autoclass:: torch_numopt.conjugate_gradient.ConjugateGradient
+.. autoclass:: torch_numopt.conjugate_gradient.ConjugateGradientLS
    :members:
    :undoc-members:
    :show-inheritance:
@@ -52,7 +44,4 @@ Conjugate Gradient algorithm
 Quasi-Newton
 ---------------------------------
 
-.. automodule:: torch_numopt.lbfgs_optim
-   :members:
-   :undoc-members:
-   :show-inheritance:
+(Not implemented)

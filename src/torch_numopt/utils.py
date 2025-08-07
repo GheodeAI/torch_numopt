@@ -2,9 +2,33 @@ import torch
 
 
 def param_sizes(params: list):
+    """
+    Obtains the shape of every matrix in the list of parameters provided.
+
+    Parameters
+    ----------
+    params: list
+        List of matrices containing a list of parameters.
+    """
+
     return [i.shape for i in params]
 
 def param_reshape_like(params_flat: torch.Tensor, params: list):
+    """
+    Reshapes a vector into a list of matrices with the same shapes as the `params` parameter.
+
+    Parameters
+    ----------
+    params_flat: Tensor
+        Vector with the parameters to reshape.
+    params: list
+        List of matrices with the desired shape.
+    
+    Returns
+    -------
+    reshaped_params: Tensor
+    """
+
     result = []
     acc1 = 0
     acc2 = 0
