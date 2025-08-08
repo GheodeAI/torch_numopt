@@ -1,6 +1,6 @@
 [project]
 name = "torch_numopt"
-version = "0.2.4"
+version = "0.3.0"
 description = "Classic numerical optimizaton methods for Pytorch neural networks"
 readme = "README.md"
 authors = [

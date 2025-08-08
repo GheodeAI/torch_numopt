@@ -1,6 +1,46 @@
 import torch
 
 
+def param_sizes(params: list):
+    """
+    Obtains the shape of every matrix in the list of parameters provided.
+
+    Parameters
+    ----------
+    params: list
+        List of matrices containing a list of parameters.
+    """
+
+    return [i.shape for i in params]
+
+def param_reshape_like(params_flat: torch.Tensor, params: list):
+    """
+    Reshapes a vector into a list of matrices with the same shapes as the `params` parameter.
+
+    Parameters
+    ----------
+    params_flat: Tensor
+        Vector with the parameters to reshape.
+    params: list
+        List of matrices with the desired shape.
+    
+    Returns
+    -------
+    reshaped_params: Tensor
+    """
+
+    result = []
+    acc1 = 0
+    acc2 = 0
+    for p in params:
+        flat_size = int(p.flatten().shape[0])
+        acc2 += flat_size
+        result.append(params_flat[acc1:acc2].reshape(p.shape))
+        acc1 += flat_size
+    
+    return result
+
+
 def fix_stability(mat: torch.Tensor):
     """
     Procedure to adjust a matrix by adding a very small value to the diagonal to avoid numerical
@@ -11,7 +51,7 @@ def fix_stability(mat: torch.Tensor):
 
     mat: torch.Tensor
         Ill conditioned matrix.
-    
+
     Returns
     -------
     fixed_mat: torch.Tensor
@@ -38,7 +78,7 @@ def pinv_svd_trunc(mat: torch.tensor, thresh: float = 1e-4):
     Returns
     -------
     inverted_mat: torch.Tensor
-       Pseudoinverse of the input matrix. 
+       Pseudoinverse of the input matrix.
     """
 
     U, S, Vt = torch.linalg.svd(mat)
