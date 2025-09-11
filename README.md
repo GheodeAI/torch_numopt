@@ -6,12 +6,9 @@ These methods are not very common in Deep learning frameworks due to their compu
 
 There are also a couple of methods that do not require that much memory such as SGD with line search and the Conjugate Gradient method.
 
-<!-- Implementation of numerical optimization methods for Neural Networks.
-
-Due to computational constraints, methods like Newton-Raphson or Levenberg-Marquardt are to be used with small Neural Networks as they require $O(p^3)$ space for a network with $p$ parameters. -->
-
 ## References
-[relevant paper](https://iopscience.iop.org/article/10.1088/1757-899X/495/1/012003/pdf)
+[Numerical Optimization, Jorge Nocedal, Stephen J. Wright](https://link.springer.com/book/10.1007/978-0-387-40065-5)
+[Review of second-order optimization techniques in artificial neural networks backpropagation, Hong Hui Tan, Kim Hann Lin](https://iopscience.iop.org/article/10.1088/1757-899X/495/1/012003/meta)
 
 Note: Approximate Greatest Descent is not interesting enough to be included, the author of the method is shared with the author of the review paper, making it's inclusion in the review seem biased. The method can be replicated by applying damping to the hessian on Newton's method along with a trust region method to calculate $\mu$.
 
@@ -25,3 +22,5 @@ Note: Approximate Greatest Descent is not interesting enough to be included, the
 - [x] AdaHessian
 - [ ] Quasi-Newton (LBFGS already in pytorch)
 - [ ] Hessian-free / truncated Newton
+
+If you feel like there's a missing algorithm you can open an issue with the name of the algorithm with some references and a justification why you think it should be included in the package.
