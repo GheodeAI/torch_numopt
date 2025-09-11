@@ -2,6 +2,7 @@ from __future__ import annotations
 from abc import ABC
 import torch
 from functools import reduce
+from .utils import param_reshape_like, param_flatten
 from .line_search_optimizer import LineSearchOptimizer
 from torch.autograd.functional import hessian
 from torch.func import functional_call
@@ -178,6 +179,30 @@ class SecondOrderOptimizer(LineSearchOptimizer, ABC):
                     h_list = [batch_h + prev_h for batch_h, prev_h in zip(h_list, h_list_batch)]
 
         return h_list
+    
+    def hutchinson_diagonal(self, x, y, loss_fn, vectorize=True, n_samples=1, as_matrix=False):
+        model_params = tuple(self._model.parameters())
+        params_flat = torch.hstack([i.flatten() for i in model_params])
+
+        def eval_model(*input_params):
+            out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
+            return loss_fn(out, y)
+        
+        h_diag_flat = torch.zeros_like(params_flat)
+        for _ in range(n_samples):
+            # Rademacher sample
+            z_flat = 2*torch.bernoulli(torch.full_like(params_flat, 0.5, device=params_flat.device)) - 1
+            z = tuple(param_reshape_like(z_flat, model_params))
+
+            # Pytorch documentation recommends doing (vH)^T instead of Hv directly
+            _, Hz = torch.autograd.functional.vhp(eval_model, model_params, v=z, create_graph=False)
+            Hz_flat = torch.hstack([i.flatten() for i in Hz])
+
+            h_diag_flat += z_flat*Hz_flat 
+        h_diag_flat /= n_samples 
+        
+        h_diag = param_reshape_like(h_diag_flat, model_params)
+        return h_diag
 
     @staticmethod
     def _reshape_hessian(hess: torch.Tensor):
