@@ -4,44 +4,52 @@ torch\_numopt implemented Algorithms
 Gradient Descent with Line Search 
 ---------------------------------
 
-.. autoclass:: torch_numopt.gradient_descent_lineseach.GradientDescentLS
+.. autoclass:: torch_numopt.GradientDescentLS
    :members:
    :undoc-members:
    :show-inheritance:
 
 Newton's method with Line Search
-----------------------------------
+--------------------------------
 
-.. autoclass:: torch_numopt.newton_optim.NewtonLS
+.. autoclass:: torch_numopt.NewtonLS
    :members:
    :undoc-members:
    :show-inheritance:
 
 Gauss-Newton algorithm with Line Search
-----------------------
+---------------------------------------
 
-.. autoclass:: torch_numopt.gauss_newton_optim.GaussNewtonLS
+.. autoclass:: torch_numopt.GaussNewtonLS
    :members:
    :undoc-members:
    :show-inheritance:
 
-Levemberg-Marquardt algorithm with Line Search
------------------------------
+Levenberg-Marquardt algorithm with Line Search
+----------------------------------------------
 
-.. autoclass:: torch_numopt.lm_optim.LevembergMarquardt
+.. autoclass:: torch_numopt.LevenbergMarquardtLS
    :members:
    :undoc-members:
    :show-inheritance:
 
 Conjugate Gradient algorithm with Line Search
-----------------------------
+---------------------------------------------
 
-.. autoclass:: torch_numopt.conjugate_gradient.ConjugateGradientLS
+.. autoclass:: torch_numopt.ConjugateGradientLS
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+AdaHessian
+----------
+
+.. autoclass:: torch_numopt.AdaHessian
    :members:
    :undoc-members:
    :show-inheritance:
 
 Quasi-Newton
----------------------------------
+------------
 
 (Not implemented)

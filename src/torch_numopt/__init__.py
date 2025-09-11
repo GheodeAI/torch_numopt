@@ -1,4 +1,5 @@
 from .custom_optimizer import CustomOptimizer
+from .line_search_optimizer import LineSearchOptimizer
 from .second_order_optimizer import SecondOrderOptimizer
 from .newton_optim import NewtonLS
 from .gauss_newton_optim import GaussNewtonLS
