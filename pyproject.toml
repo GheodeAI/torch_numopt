@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "torch_numopt"
 version = "0.3.1"
@@ -11,6 +15,9 @@ requires-python = ">=3.10"
 dependencies = [
     "torch"
 ]
+
+[project.urls]
+Homepage = "https://github.com/GheodeAI/torch_numopt"
 
 [project.optional-dependencies]
 dev = [
