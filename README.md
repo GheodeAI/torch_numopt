@@ -8,6 +8,7 @@ There are also a couple of methods that do not require that much memory such as 
 
 ## References
 [Numerical Optimization, Jorge Nocedal, Stephen J. Wright](https://link.springer.com/book/10.1007/978-0-387-40065-5)
+
 [Review of second-order optimization techniques in artificial neural networks backpropagation, Hong Hui Tan, Kim Hann Lin](https://iopscience.iop.org/article/10.1088/1757-899X/495/1/012003/meta)
 
 Note: Approximate Greatest Descent is not interesting enough to be included, the author of the method is shared with the author of the review paper, making it's inclusion in the review seem biased. The method can be replicated by applying damping to the hessian on Newton's method along with a trust region method to calculate $\mu$.
