@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import torch
 import torch.nn as nn
+from torch.func import functional_call
 from .custom_optimizer import CustomOptimizer
 from .utils import param_sizes
 
@@ -119,7 +120,7 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
                 ls_cond_str = ", ".join([f"'{i}'" if i is not None else "None" for i in ls_conditions])
                 last_comma_idx = ls_cond_str.rfind(",")
                 ls_cond_str = ls_cond_str[:last_comma_idx] + " or" + ls_cond_str[last_comma_idx + 1 :]
-                raise ValueError(f"Line search condition {line_search_cond} does not exist. Try {ls_cond_str}.")
+                raise ValueError(f"Line search condition {self.line_search_cond} does not exist. Try {ls_cond_str}.")
 
         return accepted
 
@@ -370,3 +371,66 @@ class LineSearchOptimizer(CustomOptimizer, ABC):
         p: list
             New search direction
         """
+
+    def get_scaling_matrix(self, 
+        x: torch.Tensor,
+        y: torch.Tensor,
+        loss_fn: nn.Module
+    ):
+        """
+        Obtains the step direction used to update the network.
+
+        Parameters
+        ----------
+
+        d_p_list: list
+            List of gradients of the parameters.
+        h_list: list
+            List of Hessians of the parameters.
+
+        Returns
+        -------
+        p: list
+            New search direction
+        """
+        
+        return None
+    
+    @torch.no_grad()
+    def step(
+        self,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        loss_fn: nn.Module,
+    ):
+        """
+        Method to update the parameters of the Neural Network.
+
+        Parameters
+        ----------
+
+        x: torch.Tensor
+            Inputs of the Neural Network.
+        y: torch.Tensor
+            Targets of the Neural Network.
+        loss_fn: nn.Module
+            Loss function to be optimized.
+        """
+
+        def eval_model(*input_params):
+            out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
+            return loss_fn(out, y)
+
+        # Calculate exact Hessian matrix
+        h_list = self.get_scaling_matrix(x, y, loss_fn)
+
+        for group in self.param_groups:
+            # Calculate gradients
+            params_with_grad = []
+            d_p_list = []
+            for p in group["params"]:
+                if p.grad is not None:
+                    params_with_grad.append(p)
+                    d_p_list.append(p.grad)
+
+            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, h_list=h_list, eval_model=eval_model)

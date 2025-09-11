@@ -40,6 +40,19 @@ def param_reshape_like(params_flat: torch.Tensor, params: list):
     
     return result
 
+def param_flatten(params: list):
+    return torch.hstack(_param_flatten_rec(params))
+
+def _param_flatten_rec(params: list):
+    all_params = []
+    for i in params:
+        if isinstance(i, torch.Tensor):
+            all_params.append(i.flatten())
+        else:
+            all_params += param_flatten(i)
+    
+    return all_params
+
 
 def fix_stability(mat: torch.Tensor):
     """
@@ -83,6 +96,8 @@ def pinv_svd_trunc(mat: torch.tensor, thresh: float = 1e-4):
 
     U, S, Vt = torch.linalg.svd(mat)
 
+    # max_val = torch.max(S)
+    # S_tresh = S < thresh * max_val
     S_tresh = S < thresh
 
     S_inv_trunc = 1.0 / S

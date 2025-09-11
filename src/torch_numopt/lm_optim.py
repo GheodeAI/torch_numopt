@@ -112,25 +112,12 @@ class LevenbergMarquardtLS(SecondOrderOptimizer):
 
         return dir_list
 
-    @torch.no_grad()
-    def step(self, x, y, loss_fn):
-        def eval_model(*input_params):
-            out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
-            return loss_fn(out, y)
-
-        # Calculate approximate Hessian matrix
-        h_list = self.approx_hessian_gn(x, y, loss_fn, vectorize=True)
-
-        for group in self.param_groups:
-            # Calculte gradients
-            params_with_grad = []
-            d_p_list = []
-            for p in group["params"]:
-                if p.grad is not None:
-                    params_with_grad.append(p)
-                    d_p_list.append(p.grad)
-
-            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, h_list=h_list, eval_model=eval_model)
+    def get_scaling_matrix(self, 
+        x: torch.Tensor,
+        y: torch.Tensor,
+        loss_fn: nn.Module
+    ):
+        return self.approx_hessian_gn(x, y, loss_fn, vectorize=True)
 
     def update(self, loss):
         loss_val = loss.detach().item()

@@ -5,3 +5,4 @@ from .gauss_newton_optim import GaussNewtonLS
 from .lm_optim import LevenbergMarquardtLS
 from .gradient_descent_lineseach import GradientDescentLS
 from .conjugate_gradient import ConjugateGradientLS
+from .adahessian import AdaHessian

@@ -98,19 +98,9 @@ class ConjugateGradientLS(LineSearchOptimizer):
         next_dir = param_reshape_like(grad - beta * res , d_p_list)
         return next_dir
 
-    @torch.no_grad()
-    def step(self, x, y, loss_fn):
-        def eval_model(*input_params):
-            out = functional_call(self._model, dict(zip(self._param_keys, input_params)), x)
-            return loss_fn(out, y)
-
-        for group in self.param_groups:
-            # Calculate gradients
-            params_with_grad = []
-            d_p_list = []
-            for p in group["params"]:
-                if p.grad is not None:
-                    params_with_grad.append(p)
-                    d_p_list.append(p.grad)
-
-            self.apply_gradients(params=params_with_grad, d_p_list=d_p_list, eval_model=eval_model)
+    def get_scaling_matrix(self, 
+        x: torch.Tensor,
+        y: torch.Tensor,
+        loss_fn: nn.Module
+    ):
+        return None
