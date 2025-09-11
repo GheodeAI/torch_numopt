@@ -12,8 +12,9 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath("./src/torch_numopt"))
+
 sys.path.insert(0, os.path.abspath("../src/torch_numopt"))
+sys.path.insert(0, os.path.abspath("./src/torch_numopt"))
 
 # -- Project information -----------------------------------------------------
 
@@ -22,7 +23,7 @@ author = 'Eugenio Lorente-Ramos'
 copyright = f'2024, {author}'
 
 # The full version, including alpha/beta/rc tags
-release = '0.3.0'
+release = '0.3.1'
 
 # -- General configuration ---------------------------------------------------
 
@@ -76,4 +77,4 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
-# html_css_files = ["custom.css"]
+html_css_files = ["custom.css"]
