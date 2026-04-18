@@ -1,9 +1,12 @@
 from .custom_optimizer import CustomOptimizer
 from .line_search_optimizer import LineSearchOptimizer
 from .second_order_optimizer import SecondOrderOptimizer
-from .newton_optim import NewtonLS
-from .gauss_newton_optim import GaussNewtonLS
-from .lm_optim import LevenbergMarquardtLS
-from .gradient_descent_lineseach import GradientDescentLS
-from .conjugate_gradient import ConjugateGradientLS
-from .adahessian import AdaHessian
+
+from . import second_order
+from .second_order import *
+
+from . import first_order
+from .first_order import *
+
+from . import residual
+from .residual import *

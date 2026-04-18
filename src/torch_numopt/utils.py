@@ -1,4 +1,8 @@
+"""
+"""
+
 import torch
+import torch.linalg
 
 
 def param_sizes(params: list):
@@ -13,6 +17,7 @@ def param_sizes(params: list):
 
     return [i.shape for i in params]
 
+
 def param_reshape_like(params_flat: torch.Tensor, params: list):
     """
     Reshapes a vector into a list of matrices with the same shapes as the `params` parameter.
@@ -23,7 +28,7 @@ def param_reshape_like(params_flat: torch.Tensor, params: list):
         Vector with the parameters to reshape.
     params: list
         List of matrices with the desired shape.
-    
+
     Returns
     -------
     reshaped_params: Tensor
@@ -37,11 +42,13 @@ def param_reshape_like(params_flat: torch.Tensor, params: list):
         acc2 += flat_size
         result.append(params_flat[acc1:acc2].reshape(p.shape))
         acc1 += flat_size
-    
+
     return result
+
 
 def param_flatten(params: list):
     return torch.hstack(_param_flatten_rec(params))
+
 
 def _param_flatten_rec(params: list):
     all_params = []
@@ -50,7 +57,7 @@ def _param_flatten_rec(params: list):
             all_params.append(i.flatten())
         else:
             all_params += param_flatten(i)
-    
+
     return all_params
 
 

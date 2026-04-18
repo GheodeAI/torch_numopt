@@ -4,9 +4,8 @@ import torch
 import torch.nn as nn
 from torch.autograd.functional import hessian
 from torch.func import functional_call
-from .utils import param_reshape_like, param_flatten
-from .second_order_optimizer import SecondOrderOptimizer
-from .utils import fix_stability, pinv_svd_trunc
+from ..utils import param_reshape_like
+from ..second_order_optimizer import SecondOrderOptimizer
 
 
 class AdaHessian(SecondOrderOptimizer):
@@ -39,8 +38,8 @@ class AdaHessian(SecondOrderOptimizer):
         model: nn.Module,
         lr_init: float = 1,
         lr_method: str = None,
-        beta1 = 0.9,
-        beta2 = 0.999,
+        beta1=0.9,
+        beta2=0.999,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
@@ -71,7 +70,6 @@ class AdaHessian(SecondOrderOptimizer):
         self.prev_first_moment = 0
         self.prev_hess_moment = 0
         self.k = k
-    
 
     def get_step_direction(self, d_p_list, h_list):
         """ """
@@ -86,21 +84,22 @@ class AdaHessian(SecondOrderOptimizer):
         self.beta1_acc *= self.beta1
 
         # Calculate second unbiased moment of the hessian diagonal
-        hess_moment = self.beta2 * self.prev_hess_moment + (1 - self.beta2) * h_diag * h_diag
+        hess_moment = (
+            self.beta2 * self.prev_hess_moment + (1 - self.beta2) * h_diag * h_diag
+        )
         self.prev_hess_moment = hess_moment
         hess_moment_unbias = hess_moment / (1 - self.beta2_acc)
         self.beta2_acc *= self.beta2
 
         # Calculate the next step direction
-        next_dir_flat = first_moment_unbias / (hess_moment_unbias**(0.5*self.k) + eps)
+        next_dir_flat = first_moment_unbias / (
+            hess_moment_unbias ** (0.5 * self.k) + eps
+        )
 
         next_dir = param_reshape_like(next_dir_flat, d_p_list)
         return next_dir
 
-
-    def get_scaling_matrix(self, 
-        x: torch.Tensor,
-        y: torch.Tensor,
-        loss_fn: nn.Module
-    ):
-        return self.hutchinson_diagonal(x, y, loss_fn, n_samples=self.samples, vectorize=True)
+    def get_scaling_matrix(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
+        return self.hutchinson_diagonal(
+            x, y, loss_fn, n_samples=self.samples, vectorize=True
+        )

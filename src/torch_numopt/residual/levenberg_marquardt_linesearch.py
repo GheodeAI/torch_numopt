@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 from torch.autograd.functional import hessian
 from torch.func import functional_call
-from .second_order_optimizer import SecondOrderOptimizer
-from .utils import fix_stability, pinv_svd_trunc
+from ..second_order_optimizer import SecondOrderOptimizer
+from ..utils import fix_stability, pinv_svd_trunc
 import warnings
 from copy import deepcopy, copy
 
@@ -87,7 +87,9 @@ class LevenbergMarquardtLS(SecondOrderOptimizer):
         self.solver = solver
 
         if fletcher and solver == "solve":
-            warnings.warn("Using 'solve' with fletcher's method usually doesn't work very well. Try using 'pinv' instead.")
+            warnings.warn(
+                "Using 'solve' with fletcher's method usually doesn't work very well. Try using 'pinv' instead."
+            )
 
     def get_step_direction(self, d_p_list, h_list):
         dir_list = [None] * len(d_p_list)
@@ -106,17 +108,15 @@ class LevenbergMarquardtLS(SecondOrderOptimizer):
 
                     d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
                 case "solve":
-                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(d_p.shape)
+                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(
+                        d_p.shape
+                    )
 
             dir_list[i] = d2_p
 
         return dir_list
 
-    def get_scaling_matrix(self, 
-        x: torch.Tensor,
-        y: torch.Tensor,
-        loss_fn: nn.Module
-    ):
+    def get_scaling_matrix(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
         return self.approx_hessian_gn(x, y, loss_fn, vectorize=True)
 
     def update(self, loss):
@@ -124,10 +124,10 @@ class LevenbergMarquardtLS(SecondOrderOptimizer):
 
         if self.prev_loss is None:
             self.prev_loss = loss_val
-            self._prev_params = deepcopy(self._params)
+            self._prev_params = [p.detach().clone() for p in self._params]
         elif loss_val <= self.prev_loss:
             self.prev_loss = loss_val
-            self._prev_params = deepcopy(self._params)
+            self._prev_params = [p.detach().clone() for p in self._params]
             self.mu *= self.mu_dec
         else:
             self._params = self._prev_params

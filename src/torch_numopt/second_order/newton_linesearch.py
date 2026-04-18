@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 from torch.autograd.functional import hessian
 from torch.func import functional_call
-from .second_order_optimizer import SecondOrderOptimizer
-from .utils import fix_stability, pinv_svd_trunc
+from ..utils import fix_stability
+from ..second_order_optimizer import SecondOrderOptimizer
 
 
 class NewtonLS(SecondOrderOptimizer):
@@ -96,15 +96,13 @@ class NewtonLS(SecondOrderOptimizer):
                     h_i = h_adjusted.pinverse()
                     d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
                 case "solve":
-                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(d_p.shape)
+                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(
+                        d_p.shape
+                    )
 
             dir_list[i] = d2_p
 
         return dir_list
 
-    def get_scaling_matrix(self, 
-        x: torch.Tensor,
-        y: torch.Tensor,
-        loss_fn: nn.Module
-    ):
+    def get_scaling_matrix(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
         return self.exact_hessian(x, y, loss_fn, vectorize=True)
