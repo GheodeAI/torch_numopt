@@ -1,2 +1,2 @@
-from .gauss_newton_linesearch import GaussNewtonLS
-from .levenberg_marquardt_linesearch import LevenbergMarquardtLS
+from .gauss_newton import GaussNewtonLS
+from .levenberg_marquardt import LevenbergMarquardtLS

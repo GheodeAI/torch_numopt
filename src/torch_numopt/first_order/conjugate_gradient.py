@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.func import functional_call
 from ..line_search_optimizer import LineSearchOptimizer
+from ..scaling_matrix_calculator import *
 from ..custom_optimizer import CustomOptimizer
 from copy import copy, deepcopy
 from ..utils import param_reshape_like
@@ -53,6 +54,7 @@ class ConjugateGradientLS(LineSearchOptimizer):
     ):
         super().__init__(
             model,
+            scaling_matrix=NaiveIdentityCalculator(model=model),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search_cond=line_search_cond,
@@ -83,30 +85,17 @@ class ConjugateGradientLS(LineSearchOptimizer):
             case "FR":
                 beta = torch.dot(res, res) / (torch.dot(prev_res, prev_res) + eps)
             case "PR":
-                beta = torch.dot(res, res - prev_res) / (
-                    torch.dot(prev_res, prev_res) + eps
-                )
+                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
             case "PRP+":
-                beta = torch.dot(res, res - prev_res) / (
-                    torch.dot(prev_res, prev_res) + eps
-                )
+                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
                 beta = torch.relu(beta)
             case "HS":
-                beta = torch.dot(res, res - prev_res) / (
-                    torch.dot(prev_step, res - prev_res) + eps
-                )
+                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_step, res - prev_res) + eps)
             case "DY":
-                beta = torch.dot(res, res) / (
-                    torch.dot(-prev_step, res - prev_res) + eps
-                )
+                beta = torch.dot(res, res) / (torch.dot(-prev_step, res - prev_res) + eps)
             case _:
-                raise ValueError(
-                    "Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'."
-                )
+                raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'.")
 
         # Invert sign since we update the weights like x - lr*step
         next_dir = param_reshape_like(grad - beta * res, d_p_list)
         return next_dir
-
-    def get_scaling_matrix(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
-        return None

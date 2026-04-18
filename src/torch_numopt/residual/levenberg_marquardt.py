@@ -4,13 +4,14 @@ import torch
 import torch.nn as nn
 from torch.autograd.functional import hessian
 from torch.func import functional_call
-from ..second_order_optimizer import SecondOrderOptimizer
+from ..line_search_optimizer import LineSearchOptimizer
+from ..scaling_matrix_calculator import *
 from ..utils import fix_stability, pinv_svd_trunc
 import warnings
 from copy import deepcopy, copy
 
 
-class LevenbergMarquardtLS(SecondOrderOptimizer):
+class LevenbergMarquardtLS(LineSearchOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
     and the matlab implementation of 'learnlm' https://es.mathworks.com/help/deeplearning/ref/trainlm.html#d126e69092
@@ -68,6 +69,7 @@ class LevenbergMarquardtLS(SecondOrderOptimizer):
     ):
         super().__init__(
             model,
+            scaling_matrix=GaussNewtonBlockApproximation(model=model, batch_size=batch_size),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search_cond=line_search_cond,
@@ -75,7 +77,6 @@ class LevenbergMarquardtLS(SecondOrderOptimizer):
             c1=c1,
             c2=c2,
             tau=tau,
-            batch_size=batch_size,
         )
 
         self.mu = mu
@@ -87,9 +88,7 @@ class LevenbergMarquardtLS(SecondOrderOptimizer):
         self.solver = solver
 
         if fletcher and solver == "solve":
-            warnings.warn(
-                "Using 'solve' with fletcher's method usually doesn't work very well. Try using 'pinv' instead."
-            )
+            warnings.warn("Using 'solve' with fletcher's method usually doesn't work very well. Try using 'pinv' instead.")
 
     def get_step_direction(self, d_p_list, h_list):
         dir_list = [None] * len(d_p_list)
@@ -108,16 +107,11 @@ class LevenbergMarquardtLS(SecondOrderOptimizer):
 
                     d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
                 case "solve":
-                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(
-                        d_p.shape
-                    )
+                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(d_p.shape)
 
             dir_list[i] = d2_p
 
         return dir_list
-
-    def get_scaling_matrix(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
-        return self.approx_hessian_gn(x, y, loss_fn, vectorize=True)
 
     def update(self, loss):
         loss_val = loss.detach().item()

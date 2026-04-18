@@ -1,6 +1,12 @@
 from .custom_optimizer import CustomOptimizer
 from .line_search_optimizer import LineSearchOptimizer
-from .second_order_optimizer import SecondOrderOptimizer
+from .scaling_matrix_calculator import (
+    ScalingMatrixCalculator,
+    ExactBlockHessianCalculator,
+    GaussNewtonBlockApproximation,
+    NaiveIdentityCalculator,
+    HutchinsonDiagonalApproximation,
+)
 
 from . import second_order
 from .second_order import *

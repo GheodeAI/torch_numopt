@@ -28,3 +28,5 @@ dev = [
     "sphinx_material",
 ]
 
+[tool.black]
+line-length = 150

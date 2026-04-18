@@ -1,14 +1,12 @@
 from __future__ import annotations
-from typing import Iterable
 import torch
 import torch.nn as nn
-from torch.autograd.functional import hessian
-from torch.func import functional_call
 from ..utils import fix_stability
-from ..second_order_optimizer import SecondOrderOptimizer
+from ..line_search_optimizer import LineSearchOptimizer
+from ..scaling_matrix_calculator import *
 
 
-class NewtonLS(SecondOrderOptimizer):
+class NewtonLS(LineSearchOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
 
@@ -63,6 +61,7 @@ class NewtonLS(SecondOrderOptimizer):
     ):
         super().__init__(
             model,
+            scaling_matrix=ExactBlockHessianCalculator(model=model, batch_size=batch_size),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search_cond=line_search_cond,
@@ -70,7 +69,6 @@ class NewtonLS(SecondOrderOptimizer):
             c1=c1,
             c2=c2,
             tau=tau,
-            batch_size=batch_size,
         )
 
         self.mu = mu
@@ -96,13 +94,8 @@ class NewtonLS(SecondOrderOptimizer):
                     h_i = h_adjusted.pinverse()
                     d2_p = (h_i @ d_p.flatten()).reshape(d_p.shape)
                 case "solve":
-                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(
-                        d_p.shape
-                    )
+                    d2_p = torch.linalg.solve(h_adjusted, d_p.flatten()).reshape(d_p.shape)
 
             dir_list[i] = d2_p
 
         return dir_list
-
-    def get_scaling_matrix(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
-        return self.exact_hessian(x, y, loss_fn, vectorize=True)

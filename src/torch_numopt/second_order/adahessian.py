@@ -5,10 +5,11 @@ import torch.nn as nn
 from torch.autograd.functional import hessian
 from torch.func import functional_call
 from ..utils import param_reshape_like
-from ..second_order_optimizer import SecondOrderOptimizer
+from ..line_search_optimizer import LineSearchOptimizer
+from ..scaling_matrix_calculator import *
 
 
-class AdaHessian(SecondOrderOptimizer):
+class AdaHessian(LineSearchOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
 
@@ -50,6 +51,7 @@ class AdaHessian(SecondOrderOptimizer):
     ):
         super().__init__(
             model,
+            scaling_matrix=HutchinsonDiagonalApproximation(model=model, n_samples=1),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search_cond=line_search_cond,
@@ -57,7 +59,6 @@ class AdaHessian(SecondOrderOptimizer):
             c1=c1,
             c2=c2,
             tau=tau,
-            batch_size=None,
         )
 
         self.samples = 5
@@ -84,22 +85,13 @@ class AdaHessian(SecondOrderOptimizer):
         self.beta1_acc *= self.beta1
 
         # Calculate second unbiased moment of the hessian diagonal
-        hess_moment = (
-            self.beta2 * self.prev_hess_moment + (1 - self.beta2) * h_diag * h_diag
-        )
+        hess_moment = self.beta2 * self.prev_hess_moment + (1 - self.beta2) * h_diag * h_diag
         self.prev_hess_moment = hess_moment
         hess_moment_unbias = hess_moment / (1 - self.beta2_acc)
         self.beta2_acc *= self.beta2
 
         # Calculate the next step direction
-        next_dir_flat = first_moment_unbias / (
-            hess_moment_unbias ** (0.5 * self.k) + eps
-        )
+        next_dir_flat = first_moment_unbias / (hess_moment_unbias ** (0.5 * self.k) + eps)
 
         next_dir = param_reshape_like(next_dir_flat, d_p_list)
         return next_dir
-
-    def get_scaling_matrix(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
-        return self.hutchinson_diagonal(
-            x, y, loss_fn, n_samples=self.samples, vectorize=True
-        )
