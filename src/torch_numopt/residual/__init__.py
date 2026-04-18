@@ -1,2 +1,2 @@
-from .gauss_newton import GaussNewtonLS
-from .levenberg_marquardt import LevenbergMarquardtLS
+from .gauss_newton import GaussNewton, GaussNewtonLS
+from .levenberg_marquardt import LevenbergMarquardt, LevenbergMarquardtLS

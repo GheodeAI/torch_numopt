@@ -1,2 +1,2 @@
-from .conjugate_gradient import ConjugateGradientLS
 from .gradient_descent import GradientDescentLS
+from .conjugate_gradient import ConjugateGradient, ConjugateGradientLS

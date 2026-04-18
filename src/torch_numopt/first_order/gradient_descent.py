@@ -1,11 +1,8 @@
 from __future__ import annotations
-from typing import Iterable
-import torch
 import torch.nn as nn
-from torch.func import functional_call
-from ..line_search_optimizer import LineSearchOptimizer
+from ..line_search import create_line_search_solver
+from ..numerical_optimizer import LineSearchOptimizer
 from ..scaling_matrix_calculator import *
-from ..custom_optimizer import CustomOptimizer
 
 
 class GradientDescentLS(LineSearchOptimizer):
@@ -41,7 +38,6 @@ class GradientDescentLS(LineSearchOptimizer):
         tau: float = 0.1,
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
-        **kwargs,
     ):
 
         super().__init__(
@@ -49,12 +45,6 @@ class GradientDescentLS(LineSearchOptimizer):
             scaling_matrix=NaiveIdentityCalculator(model=model),
             lr_init=lr_init,
             lr_method=lr_method,
-            line_search_cond=line_search_cond,
-            line_search_method=line_search_method,
-            c1=c1,
-            c2=c2,
+            line_search=create_line_search_solver(method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau),
             tau=tau,
         )
-
-    def get_step_direction(self, d_p_list, h_list):
-        return d_p_list

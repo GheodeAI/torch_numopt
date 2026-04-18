@@ -1,6 +1,7 @@
 """ """
 
 from __future__ import annotations
+from typing import Iterable
 from abc import ABC, abstractmethod
 import torch
 from torch import nn
@@ -14,7 +15,7 @@ class ScalingMatrixCalculator(ABC):
     def __init__(
         self,
         model: nn.Module,
-        batch_size: int = None,
+        batch_size: int | None = None,
     ):
         self.model = model
         self.param_keys = dict(model.named_parameters()).keys()
@@ -52,39 +53,41 @@ class ScalingMatrixCalculator(ABC):
 
         return hess.reshape(new_shape)
 
-    def __call__(self, x, y, loss_fn):
-        return self.curvature_matrix(x, y, loss_fn)
+    def __call__(self, x, y, loss_fn) -> Iterable | None:
+        return self.scaling_matrix(x, y, loss_fn)
 
     @abstractmethod
-    def curvature_matrix(self, x, y, loss_fn):
+    def scaling_matrix(self, x, y, loss_fn) -> Iterable | None:
         """ """
 
 
 class NaiveIdentityCalculator(ScalingMatrixCalculator):
-    def curvature_matrix(self, x, y, loss_fn):
-        return torch.ones(1, device=x.device)
+    def scaling_matrix(self, x, y, loss_fn) -> None:
+        return None
 
 
 class ExactBlockHessianCalculator(ScalingMatrixCalculator):
     def __init__(
         self,
         model: nn.Module,
-        batch_size: int = None,
-        damping: bool = True,
+        batch_size: int | None = None,
+        damping: str | None = None,
+        mu: float = 1e-4,
     ):
         super().__init__(model=model, batch_size=batch_size)
         self.damping = damping
+        self.mu = mu
 
-    def curvature_matrix(self, x, y, loss_fn):
+    def scaling_matrix(self, x, y, loss_fn) -> Iterable:
         """
         Calculation of the exact hessian of the Neural network given a dataset.
 
         Parameters
         ----------
         x: torch.Tensor
-            Input dataset for calculting the loss.
+            Input dataset for calculating the loss.
         y: torch.Tensor
-            Target dataset for calculting the loss.
+            Target dataset for calculating the loss.
         loss_fn: torch.Module
             Loss function for which to calculate the hessian.
         vectorize: boolean
@@ -113,7 +116,7 @@ class ExactBlockHessianCalculator(ScalingMatrixCalculator):
         else:
             # Calculate hessian for each batch and add the results
             batch_start = torch.arange(0, len(x), self.batch_size)
-            h_list = None
+            h_list = []
             for start in batch_start:
                 # Prepare batch
                 x_batch = x[start : start + self.batch_size]
@@ -125,12 +128,20 @@ class ExactBlockHessianCalculator(ScalingMatrixCalculator):
                 for i, _ in enumerate(h_list_batch):
                     h_list_batch[i] = self._reshape_hessian(h_list_batch[i][i]) * scale
 
-                # Agreggate result
-                if h_list is None:
+                # Aggregate result
+                if h_list == []:
                     h_list = h_list_batch
                 else:
                     for i, (batch_h, prev_h) in enumerate(zip(h_list, h_list_batch)):
                         h_list[i] = batch_h + prev_h
+
+        # Damp matrix
+        if self.damping is not None:
+            for i, h in enumerate(h_list):
+                if self.damping == "identity":
+                    h_list[i] = h + self.mu * torch.eye(h.shape[0], device=h.device)
+                elif self.damping == "fletcher":
+                    h_list[i] = h + self.mu * h.diagonal()
 
         return h_list
 
@@ -139,13 +150,17 @@ class GaussNewtonBlockApproximation(ScalingMatrixCalculator):
     def __init__(
         self,
         model: nn.Module,
-        batch_size: int = None,
+        batch_size: int | None = None,
         vectorize: bool = True,
+        damping: str | None = None,
+        mu: float = 1e-4,
     ):
         super().__init__(model=model, batch_size=batch_size)
         self.vectorize = vectorize
+        self.damping = damping
+        self.mu = mu
 
-    def curvature_matrix(self, x, y, loss_fn):
+    def scaling_matrix(self, x, y, loss_fn) -> Iterable:
         r"""
         Calculation of the an approximate hessian of the Neural network given a dataset as in the Gauss-Newton algorithm.
         The approximate Hessian is calculated as the square of the Jacobian of the residual of every data point with respect to the parameters.
@@ -166,9 +181,9 @@ class GaussNewtonBlockApproximation(ScalingMatrixCalculator):
         Parameters
         ----------
         x: torch.Tensor
-            Input dataset for calculting the loss.
+            Input dataset for calculating the loss.
         y: torch.Tensor
-            Target dataset for calculting the loss.
+            Target dataset for calculating the loss.
         loss_fn: torch.Module
             Loss function for which to calculate the hessian.
         vectorize: boolean
@@ -196,13 +211,13 @@ class GaussNewtonBlockApproximation(ScalingMatrixCalculator):
         else:
             # Calculate hessian for each batch and add the results
             batch_start = torch.arange(0, len(x), self.batch_size)
-            h_list = None
+            h_list = []
             for start in batch_start:
                 # Prepare batch
                 x_batch = x[start : start + self.batch_size]
                 y_batch = y[start : start + self.batch_size]
 
-                # Calculate appeoximate hessian of the batch
+                # Calculate approximate hessian of the batch
                 get_residuals = lambda *p: get_residuals_batch(x_batch, y_batch, *p)
                 j_list = torch.autograd.functional.jacobian(get_residuals, model_params, create_graph=False, vectorize=self.vectorize)
                 h_list_batch = [None] * len(j_list)
@@ -210,11 +225,19 @@ class GaussNewtonBlockApproximation(ScalingMatrixCalculator):
                     j = j.flatten(start_dim=1)
                     h_list_batch[j_idx] = self._reshape_hessian(j.T @ j) * scale
 
-                # Agreggate result
-                if h_list is None:
+                # Aggregate result
+                if h_list == []:
                     h_list = h_list_batch
                 else:
                     h_list = [batch_h + prev_h for batch_h, prev_h in zip(h_list, h_list_batch)]
+
+        # Damp matrix
+        if self.damping is not None:
+            for i, h in enumerate(h_list):
+                if self.damping == "identity":
+                    h_list[i] = h + self.mu * torch.eye(h.shape[0], device=h.device)
+                elif self.damping == "fletcher":
+                    h_list[i] = h + self.mu * h.diagonal()
 
         return h_list
 
@@ -229,7 +252,7 @@ class HutchinsonDiagonalApproximation(ScalingMatrixCalculator):
         super().__init__(model=model, batch_size=batch_size)
         self.n_samples = n_samples
 
-    def curvature_matrix(self, x, y, loss_fn):
+    def scaling_matrix(self, x, y, loss_fn) -> Iterable:
         model_params = tuple(self.model.parameters())
         params_flat = torch.hstack([i.flatten() for i in model_params])
 

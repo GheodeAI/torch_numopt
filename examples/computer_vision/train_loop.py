@@ -8,12 +8,16 @@ def train_loop(
     epochs=100,
     max_patience=50
 ):
+    device = next(model.parameters()).device
     all_loss = {}
     patience = 0
     for epoch in range(epochs):
         print("epoch: ", epoch, end="")
         all_loss[epoch + 1] = 0
         for i, (b_x, b_y) in enumerate(data_loader):
+            b_x = b_x.to(device)
+            b_y = b_y.to(device)
+
             pre = model(b_x)
             loss = loss_fn(pre, b_y)
             opt.zero_grad()

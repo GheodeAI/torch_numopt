@@ -1,6 +1,7 @@
 """ """
 
 from __future__ import annotations
+from typing import Callable, Iterable
 from abc import ABC, abstractmethod
 import torch
 import torch.nn as nn
@@ -18,8 +19,8 @@ class CustomOptimizer(Optimizer, ABC):
         x: torch.Tensor,
         y: torch.Tensor,
         loss_fn: nn.Module,
-        closure: callable = None,
-    ):
+        closure: Callable | None = None,
+    ) -> Iterable:
         """
         Method to update the parameters of the Neural Network.
 
@@ -32,7 +33,7 @@ class CustomOptimizer(Optimizer, ABC):
             Targets of the Neural Network.
         loss_fn: nn.Module
             Loss function to be optimized.
-        closure: callable
+        closure: Callable
             Kept for compatibility, unused.
         """
 

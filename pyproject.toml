@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "torch_numopt"
 version = "0.3.1"
-description = "Classic numerical optimizaton methods for Pytorch neural networks"
+description = "Classic numerical optimization methods for Pytorch neural networks"
 readme = "README.md"
 authors = [
     { name = "eugenioLR", email = "eugeniolorente0@gmail.com" }
@@ -24,9 +24,13 @@ dev = [
     "scikit-learn",
     "matplotlib",
     "numpy",
+    "jupyter",
     "sphinx>=7.1.1",
     "sphinx_material",
+    "black[jupyter]",
+    "torchvision"
 ]
 
 [tool.black]
 line-length = 150
+target-version = ['py310']

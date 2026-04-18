@@ -81,9 +81,9 @@ def fix_stability(mat: torch.Tensor):
     return mat + torch.eye(mat.shape[0], device=mat.device) * torch.finfo(mat.dtype).eps
 
 
-def pinv_svd_trunc(mat: torch.tensor, thresh: float = 1e-4):
+def pinv_svd_trunc(mat: torch.Tensor, thresh: float = 1e-4):
     """
-    Procedure to calculate the pseudoinverse of a matrix by using truncated SVD in order to mantain
+    Procedure to calculate the pseudoinverse of a matrix by using truncated SVD in order to maintain
     numerical stability.
 
     Parameters
