@@ -21,6 +21,7 @@ Note: Approximate Greatest Descent is not interesting enough to be included, the
 - [x] Stochastic Gradient Descent with Line Search
 - [x] Conjugate Gradient
 - [x] AdaHessian
+- [ ] Natural gradient descent
 - [ ] Quasi-Newton (LBFGS already in pytorch)
 - [ ] Hessian-free / truncated Newton
 
