@@ -24,11 +24,12 @@ dev = [
     "scikit-learn",
     "matplotlib",
     "numpy",
+    "torchvision",
     "jupyter",
     "sphinx>=7.1.1",
     "sphinx_material",
     "black[jupyter]",
-    "torchvision"
+    "pytest"
 ]
 
 [tool.black]

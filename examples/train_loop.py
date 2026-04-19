@@ -11,7 +11,6 @@ def train_loop(
     all_loss = {}
     patience = 0
     for epoch in range(epochs):
-        print("epoch: ", epoch, end="")
         all_loss[epoch + 1] = 0
         for batch_idx, (b_x, b_y) in enumerate(data_loader):
             pre = model(b_x)
@@ -27,6 +26,8 @@ def train_loop(
 
             all_loss[epoch + 1] += loss
         all_loss[epoch + 1] /= len(data_loader)
+
+        print("epoch: ", epoch, end="")
         print(", loss: {}".format(all_loss[epoch + 1].cpu().detach().numpy().item()))
 
         if epoch > 0 and all_loss[epoch] <= all_loss[epoch+1]:

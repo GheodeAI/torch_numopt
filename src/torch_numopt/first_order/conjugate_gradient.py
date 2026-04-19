@@ -57,12 +57,12 @@ class ConjugateGradient(NumericalOptimizer):
     def get_step_direction(self, d_p_list, _):
         """ """
 
-        if self.prev_grad is None:
+        if self.prev_grad_ is None:
             return d_p_list
 
-        grad = torch.hstack([i.flatten() for i in d_p_list])
-        prev_grad = torch.hstack([i.flatten() for i in self.prev_grad])
-        prev_step = torch.hstack([i.flatten() for i in self.prev_step_dir])
+        grad = torch.hstack([i.ravel() for i in d_p_list])
+        prev_grad = torch.hstack([i.ravel() for i in self.prev_grad_])
+        prev_step = torch.hstack([i.ravel() for i in self.prev_step_dir_])
 
         res = -grad
         prev_res = -prev_grad
@@ -84,7 +84,7 @@ class ConjugateGradient(NumericalOptimizer):
                 raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'.")
 
         # Invert sign since we update the weights like x - lr*step
-        next_dir = param_reshape_like(grad - beta * res, d_p_list)
+        next_dir = param_reshape_like(grad - beta * prev_step, d_p_list)
         return next_dir
 
 
@@ -125,6 +125,8 @@ class ConjugateGradientLS(LineSearchOptimizer):
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
+        max_iter: int = 20,
+        tol: float = 1e-8,
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         cg_method: str = "PRP+",
@@ -135,7 +137,7 @@ class ConjugateGradientLS(LineSearchOptimizer):
             scaling_matrix=NaiveIdentityCalculator(model=model),
             lr_init=lr_init,
             lr_method=lr_method,
-            line_search=create_line_search_solver(method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau),
+            line_search=create_line_search_solver(method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol),
         )
 
         # Conjugate gradient memory
@@ -144,12 +146,12 @@ class ConjugateGradientLS(LineSearchOptimizer):
     def get_step_direction(self, d_p_list, _):
         """ """
 
-        if self.prev_grad is None:
+        if self.prev_grad_ is None:
             return d_p_list
 
-        grad = torch.hstack([i.flatten() for i in d_p_list])
-        prev_grad = torch.hstack([i.flatten() for i in self.prev_grad])
-        prev_step = torch.hstack([i.flatten() for i in self.prev_step_dir])
+        grad = torch.hstack([i.ravel() for i in d_p_list])
+        prev_grad = torch.hstack([i.ravel() for i in self.prev_grad_])
+        prev_step = torch.hstack([i.ravel() for i in self.prev_step_dir_])
 
         res = -grad
         prev_res = -prev_grad
@@ -171,5 +173,5 @@ class ConjugateGradientLS(LineSearchOptimizer):
                 raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'.")
 
         # Invert sign since we update the weights like x - lr*step
-        next_dir = param_reshape_like(grad - beta * res, d_p_list)
+        next_dir = param_reshape_like(grad - beta * prev_step, d_p_list)
         return next_dir
