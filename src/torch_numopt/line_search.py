@@ -239,7 +239,7 @@ class InterpolationLineSearch(LineSearchSolver):
 
         loss = eval_model(*params)
         
-        # Respect sign convention in "Numerical Optimizaton" by Noceadal J., which assumes maximization.
+        # Respect sign convention in "Numerical Optimization" by Noceadal J., which assumes maximization.
         # The sign is reverted at the end of the function.
         lr_0 = -lr_init
 

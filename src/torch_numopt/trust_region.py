@@ -31,5 +31,9 @@ class CauchyPointTrustRegionSolver(TrustRegionSolver):
         pass
 
 class DoglegTrustRegionSolver(TrustRegionSolver):
+    """
+    Note: Not recommended for Deep learning since it underperforms on non-convex optimization.
+    """
+
     def trust_region(params, step_dir, d_p_list, model_radius, eval_model):
         pass
