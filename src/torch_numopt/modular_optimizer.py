@@ -1,6 +1,5 @@
 from __future__ import annotations
 from .numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
-from .scaling_matrix_calculator import *
 
 
 class ModularNumericalOptimizer(NumericalOptimizer):

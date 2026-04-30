@@ -1,6 +1,6 @@
 """ """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Callable, Iterable
 import logging
 import torch
@@ -8,13 +8,13 @@ import torch.nn as nn
 from torch.func import functional_call
 from .utils import fix_stability, pinv_svd_trunc
 from .custom_optimizer import CustomOptimizer
-from .scaling_matrix_calculator import ScalingMatrixCalculator
+from .scaling_matrix_calculator import CurvatureEstimator
 from .line_search import LineSearchSolver
 from .trust_region import TrustRegionSolver
 
 logger = logging.getLogger(__name__)
 
-lr_init_methods = ["scaled", "BB1", "BB2", "quadratic", "lipschitz", "keep", None]
+lr_init_methods = {"scaled", "BB1", "BB2", "quadratic", "lipschitz", "keep", None}
 
 
 class NumericalOptimizer(CustomOptimizer, ABC):
@@ -38,7 +38,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: ScalingMatrixCalculator,
+        scaling_matrix: CurvatureEstimator,
         lr_init: float = 1,
         lr_method: str | None = None,
         solver="solve",
@@ -115,7 +115,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
                 lr_init_methods_str = lr_init_methods_str[:last_comma_idx] + " or" + lr_init_methods_str[last_comma_idx + 1 :]
                 raise ValueError(f"Learning rate initialization method {self.lr_init} does not exist. Try {lr_init_methods_str}.")
 
-        logger.info(f"Initial lr generated = {new_lr:f} with method {self.lr_method} and initial guess {lr:f}")
+        logger.info("Initial lr generated = %g with method %s and initial guess %g.", new_lr, self.lr_method, lr)
 
         return new_lr
 
@@ -152,7 +152,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
     def get_step_direction(self, d_p_list, h_list) -> Iterable:
         eps = torch.finfo(d_p_list[0].dtype).eps
         if h_list is None:
-            logger.info(f"No curvature info. used, returning gradient.")
+            logger.info("No curvature info. used, returning gradient.")
             return d_p_list
 
         if h_list[0].ndim == 2:
@@ -165,7 +165,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
 
                     if logger.isEnabledFor(logging.DEBUG):
                         new_cond_number = torch.linalg.cond(h)
-                        logger.debug(f"Numerical instability found, condition number was {cond_number:g}, new condition number is {new_cond_number:f}")
+                        logger.debug("Numerical instability found, condition number was %g, new condition number is %g", cond_number, new_cond_number)
 
                 match self.solver:
                     case "pinv":
@@ -221,7 +221,8 @@ class NumericalOptimizer(CustomOptimizer, ABC):
             return loss_fn(out, y)
 
         # Calculate exact Hessian matrix
-        h_list = self.scaling_matrix(x, y, loss_fn)
+        self.scaling_matrix.store_data(x, y, loss_fn)
+        h_list = self.scaling_matrix()
 
         for group in self.param_groups:
             # Calculate gradients
@@ -261,7 +262,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: ScalingMatrixCalculator,
+        scaling_matrix: CurvatureEstimator,
         line_search: LineSearchSolver,
         lr_init: float = 1,
         lr_method: str | None = None,
@@ -324,20 +325,33 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: ScalingMatrixCalculator,
+        scaling_matrix: CurvatureEstimator,
         trust_region: TrustRegionSolver,
-        radius_init: float = 1,
-        radius_method: str | None = None,
+        radius_init: float = 1.0,
         solver="solve",
     ):
-        super().__init__(model=model, scaling_matrix=scaling_matrix, lr_init=radius_init, lr_method=radius_method, solver=solver)
+        super().__init__(model=model, scaling_matrix=scaling_matrix, lr_init=radius_init, solver=solver)
 
         self.trust_region = trust_region
     
-    def update_model_radius(self):
-        pass
+    def update_model_radius(self, radius, radius_init, loss, d_p_list, new_loss, step_dir, eval_model):
+        """
+        Update the model radius from the loss in the current iteration.
+        """
 
-        
+        m_0 = self.trust_region.model(0, loss, d_p_list, eval_model)
+        m_p = self.trust_region.model(step_dir, loss, d_p_list, eval_model)
+
+        rho = (loss-new_loss)/(m_0 - m_p)
+
+        param_norm = sum(torch.sum(p**2) for p in step_dir)
+
+        if rho < 0.25:
+            radius *= 0.25
+        elif rho > 0.75 and torch.isclose(param_norm, torch.tensor(radius), rtol=1e-8, atol=1e-10):
+            radius = min(2*radius, radius_init)
+
+        return rho, radius
 
     def apply_gradients(self, eval_model: Callable, params: list, d_p_list: list, h_list: list):
         """
@@ -353,29 +367,73 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         h_list: list, optional
         """
 
-        # step_dir = self.get_step_direction(d_p_list, h_list)
-        # model_radius = self.initialize_lr(self.lr_init, d_p_list, step_dir, eval_model, params)
-
         prev_loss = eval_model(*params)
-        new_loss = torch.inf
-        while prev_loss < new_loss:
-            new_params, new_step_dir = self.trust_region(params, step_dir, d_p_list, model_radius, eval_model)
+        model_radius = self.lr_init if self.prev_lr_ is None else self.prev_lr_
 
-            with torch.inference_mode():
-                new_loss = eval_model(*new_param)
+        logging.info("Starting trust region loop with radius %g.", model_radius)
+        new_params, step_dir = self.trust_region.optimize_model(params, model_radius, d_p_list, eval_model)
 
-            model_radius = self.update_model_radius()
+        with torch.inference_mode():
+            new_loss = eval_model(*new_params)
+
+        rho, model_radius = self.update_model_radius(model_radius, self.lr_init, prev_loss, d_p_list, new_loss, step_dir, eval_model)
+
+        logging.info("Finished trust region search, rho = %g, final model radius = %g.", rho, model_radius)
 
         # Apply new parameters
-        for param, new_param in zip(params, new_params):
-            with torch.no_grad():
-                param.copy_(new_param)
-        
-        self.trust_region.clear_cache()
+        if rho > 0.01:
+            for param, new_param in zip(params, new_params):
+                with torch.no_grad():
+                    param.copy_(new_param)
 
-        self.prev_lr_ = lr
-        self.prev_lr_init_ = lr_init
+        self.prev_lr_ = model_radius
         self.prev_params_ = new_params
         self.prev_step_dir_ = step_dir
         self.prev_grad_ = d_p_list
         self.prev_loss_ = eval_model(*new_params)
+
+    def step(
+        self,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        loss_fn: nn.Module,
+    ):
+        """
+        Method to update the parameters of the Neural Network.
+
+        Parameters
+        ----------
+
+        x: torch.Tensor
+            Inputs of the Neural Network.
+        y: torch.Tensor
+            Targets of the Neural Network.
+        loss_fn: nn.Module
+            Loss function to be optimized.
+        """
+
+        device = self.params[0].device
+        x = x.to(device)
+        y = y.to(device)
+
+        def eval_model(*input_params):
+            out = functional_call(self.model, dict(zip(self.param_keys, input_params)), x)
+            return loss_fn(out, y)
+
+        self.scaling_matrix.store_data(x, y, loss_fn)
+
+        for group in self.param_groups:
+            # Calculate gradients
+            params_with_grad = []
+            d_p_list = []
+            for p in group["params"]:
+                if p.grad is not None:
+                    params_with_grad.append(p)
+                    d_p_list.append(p.grad)
+
+            self.apply_gradients(
+                params=params_with_grad,
+                d_p_list=d_p_list,
+                h_list=None,
+                eval_model=eval_model,
+            )

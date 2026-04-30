@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.func import functional_call
 from .utils import fix_stability, pinv_svd_trunc
 from .custom_optimizer import CustomOptimizer
-from .scaling_matrix_calculator import ScalingMatrixCalculator
+from .scaling_matrix_calculator import CurvatureEstimator
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class LineSearchSolver(ABC):
 
         # Debug parameters
         self.n_iters_ = None
-        self.new_lr = None
+        self.new_lr_ = None
 
     @torch.enable_grad()
     def accept_step(
@@ -128,7 +128,7 @@ class LineSearchSolver(ABC):
                 ls_cond_str = ls_cond_str[:last_comma_idx] + " or" + ls_cond_str[last_comma_idx + 1 :]
                 raise ValueError(f"Line search condition {self.condition} does not exist. Try {ls_cond_str}.")
         
-        logging.info(f"Step was {'accepted' if accepted else 'rejected'}.")
+        logger.info("Step was %s.", 'accepted' if accepted else 'rejected')
 
         return accepted
 
@@ -182,7 +182,7 @@ class BacktrackingLineSearch(LineSearchSolver):
         new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
         new_loss = eval_model(*new_params)
 
-        logger.info(f"Starting backtracking line search with initial guess of {lr:g} with loss of {new_loss:g}.")
+        logger.info("Starting backtracking line search with initial guess of %g with loss of %g.", lr, new_loss)
 
         n_iters = 0
         while (
@@ -197,14 +197,14 @@ class BacktrackingLineSearch(LineSearchSolver):
             new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
             new_loss = eval_model(*new_params)
 
-            logger.debug(f"Iteration {n_iters}, new guess is {lr:g} which yielded a loss of {new_loss:g}.")
+            logger.debug("Iteration %d, new guess is %g which yielded a loss of %g.", n_iters, lr, new_loss)
 
             n_iters += 1
 
         if n_iters >= self.max_iter:
-            logger.debug(f"Exceeded the maximum number of line search iterations.")
+            logger.debug("Exceeded the maximum number of line search iterations.")
 
-        logger.info(f"Settled into lr = {lr:g}.")
+        logger.info("Settled into lr = %g.", lr)
         
         self.n_iters_ = n_iters
         self.new_lr_ = float(lr)
@@ -258,15 +258,15 @@ class InterpolationLineSearch(LineSearchSolver):
         new_params = tuple(p + lr_1 * p_step for p, p_step in zip(params, step_dir))
         new_loss = eval_model(*new_params)
 
-        logger.info(f"Starting interpolation line search with initial guess of {-lr_1:g} with loss of {new_loss:g}.")
+        logger.info("Starting interpolation line search with initial guess of %g with loss of %g.", -lr_1, new_loss)
 
         # Cubic interpolation with new calculated point
         n_iters = 0
         while (
             n_iters < self.max_iter 
             and not self.accept_step(params, new_params, step_dir, -lr_1, loss, new_loss, grad)
-            and lr_1 != lr_0
-            and lr_1 >= self.tol
+            and torch.isclose(lr_1, lr_0, rtol=1e-8, atol=1e-10)
+            and -lr_1 >= self.tol
         ):
             factor = 1 / ((lr_0 * lr_1) ** 2 * (lr_1 - lr_0) + eps)
             aux_mat = torch.tensor([[lr_0**2, -(lr_1**2)], [-(lr_0**3), lr_1**3]], device=dir_deriv.device)
@@ -286,14 +286,14 @@ class InterpolationLineSearch(LineSearchSolver):
             new_params = tuple(p + lr_1 * p_step for p, p_step in zip(params, step_dir))
             new_loss = eval_model(*new_params)
 
-            logger.debug(f"Iteration {n_iters}, new guess is {-lr_1:g} which yielded a loss of {new_loss:g}.")
+            logger.debug("Iteration %d, new guess is %g which yielded a loss of %g.", n_iters, -lr_1, new_loss)
 
             n_iters += 1
         
         if n_iters >= self.max_iter:
-            logger.debug(f"Exceeded the maximum number of line search iterations.")
+            logger.debug("Exceeded the maximum number of line search iterations.")
 
-        logger.info(f"Settled into lr = {-lr_1:g}.")
+        logger.info("Settled into lr = %g.", -lr_1)
 
         self.n_iters_ = n_iters
         self.new_lr_ = float(-lr_1.detach().item())
@@ -312,9 +312,9 @@ class BisectionLineSearch(LineSearchSolver):
 
         new_loss = eval_model(*new_params)
         new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=False)
-        new_dir_deriv = sum([torch.dot(p_grad.flatten(), p_step.flatten()) for p_grad, p_step in zip(new_grad, step_dir)])
+        new_dir_deriv = sum(torch.dot(p_grad.flatten(), p_step.flatten()) for p_grad, p_step in zip(new_grad, step_dir))
 
-        logger.info(f"Starting bisection line search with initial guess of {lr:g} with loss of {new_loss:g}.")
+        logger.info("Starting bisection line search with initial guess of %g with loss of %g.", lr, new_loss)
 
         n_iters = 0
         while n_iters < self.max_iter and torch.abs(new_dir_deriv) >= self.tol and a_max != a_min:
@@ -328,16 +328,16 @@ class BisectionLineSearch(LineSearchSolver):
             new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
             new_loss = eval_model(*new_params)
 
-            logger.debug(f"Iteration {n_iters}, new guess is {lr:g} which yielded a loss of {new_loss:g}.")
+            logger.debug("Iteration %d, new guess is %g which yielded a loss of %g.", n_iters, lr, new_loss)
 
             new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=False)
-            new_dir_deriv = sum([torch.dot(p_grad.flatten(), p_step.flatten()) for p_grad, p_step in zip(new_grad, step_dir)])
+            new_dir_deriv = sum(torch.dot(p_grad.flatten(), p_step.flatten()) for p_grad, p_step in zip(new_grad, step_dir))
             n_iters += 1
 
         if n_iters >= self.max_iter:
-            logger.debug(f"Exceeded the maximum number of line search iterations.")
+            logger.debug("Exceeded the maximum number of line search iterations.")
 
-        logger.info(f"Settled into lr = {lr:g}.")
+        logger.info("Settled into lr = %g.", lr)
 
         self.n_iters_ = n_iters
         self.new_lr_ = float(lr)
