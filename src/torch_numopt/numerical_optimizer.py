@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.func import functional_call
 from .utils import fix_stability, pinv_svd_trunc
 from .custom_optimizer import CustomOptimizer
-from .scaling_matrix_calculator import CurvatureEstimator
+from .scaling_matrix_calculator import ScalingMatrixCalculator
 from .line_search import LineSearchSolver
 from .trust_region import TrustRegionSolver
 
@@ -38,7 +38,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: CurvatureEstimator,
+        scaling_matrix: ScalingMatrixCalculator,
         lr_init: float = 1,
         lr_method: str | None = None,
         solver="solve",
@@ -222,7 +222,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
 
         # Calculate exact Hessian matrix
         self.scaling_matrix.store_data(x, y, loss_fn)
-        h_list = self.scaling_matrix()
+        h_list = self.scaling_matrix.scaling_matrix()
 
         for group in self.param_groups:
             # Calculate gradients
@@ -262,7 +262,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: CurvatureEstimator,
+        scaling_matrix: ScalingMatrixCalculator,
         line_search: LineSearchSolver,
         lr_init: float = 1,
         lr_method: str | None = None,
@@ -325,7 +325,7 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: CurvatureEstimator,
+        scaling_matrix: ScalingMatrixCalculator,
         trust_region: TrustRegionSolver,
         radius_init: float = 1.0,
         solver="solve",

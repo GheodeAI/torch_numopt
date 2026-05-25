@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.func import functional_call
 from .utils import fix_stability, pinv_svd_trunc
 from .custom_optimizer import CustomOptimizer
-from .scaling_matrix_calculator import CurvatureEstimator
+from .scaling_matrix_calculator import ScalingMatrixCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +266,7 @@ class InterpolationLineSearch(LineSearchSolver):
             n_iters < self.max_iter 
             and not self.accept_step(params, new_params, step_dir, -lr_1, loss, new_loss, grad)
             and torch.isclose(lr_1, lr_0, rtol=1e-8, atol=1e-10)
-            and -lr_1 >= self.tol
+            and lr_1 >= self.tol
         ):
             factor = 1 / ((lr_0 * lr_1) ** 2 * (lr_1 - lr_0) + eps)
             aux_mat = torch.tensor([[lr_0**2, -(lr_1**2)], [-(lr_0**3), lr_1**3]], device=dir_deriv.device)

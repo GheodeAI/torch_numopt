@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.func import functional_call
 from .utils import fix_stability, pinv_svd_trunc
 from .custom_optimizer import CustomOptimizer
-from .scaling_matrix_calculator import CurvatureEstimator
+from .scaling_matrix_calculator import ScalingMatrixCalculator
 
 tr_methods = {"cauchy", "dogleg"}
 

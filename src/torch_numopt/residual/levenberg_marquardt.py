@@ -89,13 +89,13 @@ class LevenbergMarquardt(NumericalOptimizer):
 
         if self.prev_loss is None:
             self.prev_loss = loss_val
-            self.prev_params = [p.detach().clone() for p in self.params]
+            self._prev_params = [p.detach().clone() for p in self._params]
         elif loss_val <= self.prev_loss:
             self.prev_loss = loss_val
-            self.prev_params = [p.detach().clone() for p in self.params]
+            self._prev_params = [p.detach().clone() for p in self._params]
             self.mu *= self.mu_dec
         else:
-            self.params = self.prev_params
+            self._params = self._prev_params
             self.mu /= self.mu_dec
 
         if self.mu >= self.mu_max:
