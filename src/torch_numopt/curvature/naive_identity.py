@@ -1,9 +1,13 @@
+from __future__ import annotations
+from typing import Iterable
+import torch
 from ..curvature_estimator import CurvatureEstimator
 
 class NaiveIdentityCalculator(CurvatureEstimator):
     """
     Naive second derivative approximator. Always assumes an identity as the hessian.
     """
+
     def scaling_matrix(self) -> None:
         return None
     

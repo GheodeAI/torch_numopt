@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.func import functional_call
 from .utils import fix_stability, pinv_svd_trunc
 from .custom_optimizer import CustomOptimizer
-from .scaling_matrix_calculator import ScalingMatrixCalculator
+from .curvature_estimator import CurvatureEstimator
 
 tr_methods = {"cauchy", "dogleg"}
 
@@ -66,7 +66,7 @@ class CauchyPointTrustRegionSolver(TrustRegionSolver):
 
 class DoglegTrustRegionSolver(TrustRegionSolver):
     """
-    Note: Not recommended for Deep learning since it underperforms on non-convex optimization.
+    Note: Not recommended for Deep learning since it underperforms on non-convex optimization. Added for completeness.
     """
 
     def optimize_model(self, params, radius, d_p_list, eval_model):

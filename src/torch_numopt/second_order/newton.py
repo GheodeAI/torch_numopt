@@ -3,7 +3,7 @@ import torch.nn as nn
 from ..line_search import create_line_search_solver
 from ..trust_region import create_trust_region_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
-from ..scaling_matrix_calculator import ExactBlockHessianCalculator
+from ..curvature import ExactBlockHessianCalculator
 
 
 class Newton(NumericalOptimizer):

@@ -1,4 +1,15 @@
+from __future__ import annotations
+from typing import Iterable
+import logging
+import torch
+from torch import nn
+from functools import reduce, partial
+from ..utils import param_reshape_like
+from torch.func import functional_call
 from ..curvature_estimator import CurvatureEstimator
+
+logger = logging.getLogger(__name__)
+
 
 class HutchinsonDiagonalApproximation(CurvatureEstimator):
     def __init__(

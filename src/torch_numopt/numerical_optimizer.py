@@ -8,9 +8,9 @@ import torch.nn as nn
 from torch.func import functional_call
 from .utils import fix_stability, pinv_svd_trunc
 from .custom_optimizer import CustomOptimizer
-from .scaling_matrix_calculator import ScalingMatrixCalculator
 from .line_search import LineSearchSolver
 from .trust_region import TrustRegionSolver
+from .curvature_estimator import CurvatureEstimator
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: ScalingMatrixCalculator,
+        scaling_matrix: CurvatureEstimator,
         lr_init: float = 1,
         lr_method: str | None = None,
         solver="solve",
@@ -262,7 +262,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: ScalingMatrixCalculator,
+        scaling_matrix: CurvatureEstimator,
         line_search: LineSearchSolver,
         lr_init: float = 1,
         lr_method: str | None = None,
@@ -325,7 +325,7 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: ScalingMatrixCalculator,
+        scaling_matrix: CurvatureEstimator,
         trust_region: TrustRegionSolver,
         radius_init: float = 1.0,
         solver="solve",

@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
-from ..scaling_matrix_calculator import GaussNewtonBlockApproximation
+from ..curvature import GaussNewtonBlockApproximation
 import warnings
 
 
@@ -89,10 +89,10 @@ class LevenbergMarquardt(NumericalOptimizer):
 
         if self.prev_loss is None:
             self.prev_loss = loss_val
-            self._prev_params = [p.detach().clone() for p in self._params]
+            self._prev_params = [p.detach().clone() for p in self.params]
         elif loss_val <= self.prev_loss:
             self.prev_loss = loss_val
-            self._prev_params = [p.detach().clone() for p in self._params]
+            self._prev_params = [p.detach().clone() for p in self.params]
             self.mu *= self.mu_dec
         else:
             self._params = self._prev_params

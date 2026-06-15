@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
-from ..scaling_matrix_calculator import *
+from ..curvature import NaiveIdentityCalculator
 from ..utils import param_reshape_like
 
 

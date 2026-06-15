@@ -1,4 +1,15 @@
+from __future__ import annotations
+from typing import Iterable, Optional
+import logging
+from copy import copy
+import torch
+from torch import nn
+from functools import reduce, partial
+from ..utils import param_reshape_like
+from torch.func import functional_call
 from ..curvature_estimator import CurvatureEstimator
+
+logger = logging.getLogger(__name__)
 
 class ExactBlockHessianCalculator(CurvatureEstimator):
     """
@@ -8,8 +19,8 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
     def __init__(
         self,
         model: nn.Module,
-        batch_size: int | None = None,
-        damping: str | None = None,
+        batch_size: Optional[int] = None,
+        damping: Optional[str] = None,
         mu: float = 1e-4,
     ):
         super().__init__(model=model, batch_size=batch_size)
@@ -39,7 +50,7 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
 
         scale = 1 / len(self.x_) if is_mean else 1
 
-        def eval_model_batch(x, y, *input_params):
+        def eval_model_batch(*input_params, x, y):
             out = functional_call(self.model, dict(zip(self.param_keys, input_params)), x)
             return loss_fn(out, y)
 
@@ -48,7 +59,7 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
             logger.info("Computing the exact hessian matrix.")
 
             # Calculate hessian with every sample in the dataset
-            eval_model = partial(eval_model, x=self.x_, y=self.y_)
+            eval_model = partial(eval_model_batch, x=self.x_, y=self.y_)
 
             h_list = list(torch.func.hessian(eval_model, argnums=tuple(range(len(self.params))))(*self.params))
             for i, _ in enumerate(h_list):
@@ -105,7 +116,7 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
 
         scale = 1 / len(self.x_) if is_mean else 1
 
-        def eval_model_batch(x, y, *input_params):
+        def eval_model_batch(*input_params, x, y):
             out = functional_call(self.model, dict(zip(self.param_keys, input_params)), x)
             return loss_fn(out, y)
 

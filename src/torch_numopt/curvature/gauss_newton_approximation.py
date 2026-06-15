@@ -1,12 +1,24 @@
+from __future__ import annotations
+from typing import Iterable, Optional
+import logging
+from copy import copy
+import torch
+from torch import nn
+from functools import reduce, partial
+from ..utils import param_reshape_like
+from torch.func import functional_call
 from ..curvature_estimator import CurvatureEstimator
+
+logger = logging.getLogger(__name__)
+
 
 class GaussNewtonBlockApproximation(CurvatureEstimator):
     def __init__(
         self,
         model: nn.Module,
-        batch_size: int | None = None,
+        batch_size: Optional[int] = None,
         vectorize: bool = True,
-        damping: str | None = None,
+        damping: Optional[str] = None,
         mu: float = 1e-4,
     ):
         super().__init__(model=model, batch_size=batch_size)
@@ -50,7 +62,7 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
         residual_fn = copy(self.loss_fn_)
         residual_fn.reduction = "none"
 
-        def get_residuals_batch(x, y, *input_params):
+        def get_residuals_batch(*input_params, x, y):
             out = functional_call(self.model, dict(zip(self.param_keys, input_params)), x)
             return residual_fn(out, y)
 
@@ -113,7 +125,7 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
         residual_fn = copy(self.loss_fn_)
         residual_fn.reduction = "none"
 
-        def get_residuals_batch(x, y, *input_params):
+        def get_residuals_batch(*input_params, x, y):
             out = functional_call(self.model, dict(zip(self.param_keys, input_params)), x)
             return residual_fn(out, y)
 
