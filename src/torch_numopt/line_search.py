@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 ls_methods = {"backtrack", "interpolate", "bisect"}
 ls_conditions = {"greedy", "armijo", "wolfe", "strong-wolfe", "goldstein"}
 
+
 def create_line_search_solver(method, condition, c1=1e-4, c2=0.9, tau=0.1, max_iter=20, tol=1e-8):
     match method:
         case "backtrack":
@@ -126,8 +127,8 @@ class LineSearchSolver(ABC):
                 last_comma_idx = ls_cond_str.rfind(",")
                 ls_cond_str = ls_cond_str[:last_comma_idx] + " or" + ls_cond_str[last_comma_idx + 1 :]
                 raise ValueError(f"Line search condition {self.condition} does not exist. Try {ls_cond_str}.")
-        
-        logger.info("Step was %s.", 'accepted' if accepted else 'rejected')
+
+        logger.info("Step was %s.", "accepted" if accepted else "rejected")
 
         return accepted
 
@@ -184,13 +185,8 @@ class BacktrackingLineSearch(LineSearchSolver):
         logger.info("Starting backtracking line search with initial guess of %g with loss of %g.", lr, new_loss)
 
         n_iters = 0
-        while (
-            n_iters < self.max_iter 
-            and not self.accept_step(params, new_params, step_dir, lr, loss, new_loss, grad)
-            and lr >= self.tol
-        ):
+        while n_iters < self.max_iter and not self.accept_step(params, new_params, step_dir, lr, loss, new_loss, grad) and lr >= self.tol:
             lr *= self.tau
-
 
             # Evaluate model with new lr
             new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
@@ -204,7 +200,7 @@ class BacktrackingLineSearch(LineSearchSolver):
             logger.debug("Exceeded the maximum number of line search iterations.")
 
         logger.info("Settled into lr = %g.", lr)
-        
+
         self.n_iters_ = n_iters
         self.new_lr_ = float(lr)
 
@@ -237,7 +233,7 @@ class InterpolationLineSearch(LineSearchSolver):
         eps = torch.finfo(dir_deriv.dtype).eps
 
         loss = eval_model(*params)
-        
+
         # Respect sign convention in "Numerical Optimization" by Noceadal J., which assumes maximization.
         # The sign is reverted at the end of the function.
         lr_0 = -lr_init
@@ -246,7 +242,6 @@ class InterpolationLineSearch(LineSearchSolver):
         # Calculate first interpolation point
         prev_params = tuple(p + lr_0 * p_step for p, p_step in zip(params, step_dir))
         prev_loss = eval_model(*prev_params)
-
 
         if self.accept_step(params, prev_params, step_dir, lr_init, loss, prev_loss, grad):
             return prev_params, lr_init
@@ -262,7 +257,7 @@ class InterpolationLineSearch(LineSearchSolver):
         # Cubic interpolation with new calculated point
         n_iters = 0
         while (
-            n_iters < self.max_iter 
+            n_iters < self.max_iter
             and not self.accept_step(params, new_params, step_dir, -lr_1, loss, new_loss, grad)
             and torch.isclose(lr_1, lr_0, rtol=1e-8, atol=1e-10)
             and lr_1 >= self.tol
@@ -288,7 +283,7 @@ class InterpolationLineSearch(LineSearchSolver):
             logger.debug("Iteration %d, new guess is %g which yielded a loss of %g.", n_iters, -lr_1, new_loss)
 
             n_iters += 1
-        
+
         if n_iters >= self.max_iter:
             logger.debug("Exceeded the maximum number of line search iterations.")
 

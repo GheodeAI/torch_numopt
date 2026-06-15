@@ -134,7 +134,9 @@ class AdaHessianLS(LineSearchOptimizer):
             scaling_matrix=HutchinsonDiagonalApproximation(model=model, n_samples=1),
             lr_init=lr_init,
             lr_method=lr_method,
-            line_search=create_line_search_solver(method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol),
+            line_search=create_line_search_solver(
+                method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
+            ),
         )
 
         self.samples = 5

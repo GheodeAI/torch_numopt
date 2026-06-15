@@ -86,8 +86,11 @@ class GradientDescentLS(LineSearchOptimizer):
             scaling_matrix=NaiveIdentityCalculator(model=model),
             lr_init=lr_init,
             lr_method=lr_method,
-            line_search=create_line_search_solver(method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol),
+            line_search=create_line_search_solver(
+                method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
+            ),
         )
+
 
 class GradientDescentTR(TrustRegionOptimizer):
     """
@@ -125,4 +128,3 @@ class GradientDescentTR(TrustRegionOptimizer):
             trust_region=create_trust_region_solver(method=trust_region_method, scaling_matrix=scaling_matrix),
             radius_init=radius_init,
         )
-

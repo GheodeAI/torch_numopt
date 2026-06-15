@@ -11,6 +11,7 @@ from ..curvature_estimator import CurvatureEstimator
 
 logger = logging.getLogger(__name__)
 
+
 class ExactBlockHessianCalculator(CurvatureEstimator):
     """
     Approximates the hessian in blocks, only taking the inner-layer second derivatives.
@@ -146,10 +147,9 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
                     hess_dot_step = tuple(hv_i + batch_hv_i * scale for hv_i, batch_hv_i in zip(hess_dot_step, hess_dot_step_batch))
                 logger.info("Computed batch %d for the exact hessian vector product...", i)
 
-        return hess_dot_step 
-    
-    def quadratic_form(self, d_p_list: Iterable[torch.Tensor]) -> torch.Tensor:
+        return hess_dot_step
 
+    def quadratic_form(self, d_p_list: Iterable[torch.Tensor]) -> torch.Tensor:
         scaling_matrix_dot_grad = self.hvp(d_p_list)
         quadratic_form = sum(torch.sum(vi * hvi) for vi, hvi in zip(d_p_list, scaling_matrix_dot_grad))
 

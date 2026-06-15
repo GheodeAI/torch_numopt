@@ -4,7 +4,7 @@ import torch
 import torch.linalg
 
 
-def param_sizes(params: list):
+def param_sizes(params: tuple):
     """
     Obtains the shape of every matrix in the list of parameters provided.
 
@@ -17,7 +17,7 @@ def param_sizes(params: list):
     return [i.shape for i in params]
 
 
-def param_reshape_like(params_flat: torch.Tensor, params: list):
+def param_reshape_like(params_flat: torch.Tensor, params: tuple):
     """
     Reshapes a vector into a list of matrices with the same shapes as the `params` parameter.
 
@@ -45,8 +45,23 @@ def param_reshape_like(params_flat: torch.Tensor, params: list):
     return result
 
 
-def param_flatten(params: list):
+def param_flatten(params: tuple):
     return torch.hstack(_param_flatten_rec(params))
+
+def param_norm(params: tuple):
+    return torch.sqrt(sum(torch.sum(p*p) for p in params))
+
+def param_dot(params_a: tuple, params_b: tuple):
+    return sum(torch.sum(p_a * p_b) for p_a, p_b in zip(params_a, params_b))
+
+def param_scalar_prod(scalar: float, params: tuple):
+    return tuple(scalar * p for p in params)
+
+def param_add(params_a: tuple, params_b: tuple):
+    return tuple(p_a + p_b for p_a, p_b in zip(params_a, params_b))
+
+def param_sub(params_a: tuple, params_b: tuple):
+    return tuple(p_a - p_b for p_a, p_b in zip(params_a, params_b))
 
 
 def _param_flatten_rec(params: list):

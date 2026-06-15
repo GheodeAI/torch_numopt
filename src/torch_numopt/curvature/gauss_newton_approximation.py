@@ -157,6 +157,6 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
     def quadratic_form(d_p_list: Iterable[torch.Tensor]) -> torch.Tensor:
 
         scaling_matrix_dot_grad = self.hvp(d_p_list)
-        quadratic_form = sum(torch.sum(hvi * hvi) for hvi in zip(scaling_matrix_dot_grad)) # p Jt J p = |Jp|^2
+        quadratic_form = sum(torch.sum(hvi * hvi) for hvi in zip(scaling_matrix_dot_grad))  # p Jt J p = |Jp|^2
 
         return quadratic_form

@@ -22,4 +22,3 @@ from .first_order import *
 
 from . import residual
 from .residual import *
-

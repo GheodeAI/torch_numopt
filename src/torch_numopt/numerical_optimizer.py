@@ -64,7 +64,6 @@ class NumericalOptimizer(CustomOptimizer, ABC):
         self.prev_params_ = None
         self.prev_loss_ = None
 
-
     def initialize_lr(self, lr: float, grad: list, step_dir: list, eval_model: Callable, params: list):
         """
 
@@ -333,23 +332,23 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         super().__init__(model=model, scaling_matrix=scaling_matrix, lr_init=radius_init, solver=solver)
 
         self.trust_region = trust_region
-    
-    def update_model_radius(self, radius, radius_init, loss, d_p_list, new_loss, step_dir, eval_model):
+
+    def update_model_radius(self, radius, radius_init, loss, d_p_list, new_loss, step_dir):
         """
         Update the model radius from the loss in the current iteration.
         """
 
-        m_0 = self.trust_region.model(0, loss, d_p_list, eval_model)
-        m_p = self.trust_region.model(step_dir, loss, d_p_list, eval_model)
+        m_0 = self.trust_region.model(0, loss, d_p_list)
+        m_p = self.trust_region.model(step_dir, loss, d_p_list)
 
-        rho = (loss-new_loss)/(m_0 - m_p)
+        rho = (loss - new_loss) / (m_0 - m_p)
 
         param_norm = sum(torch.sum(p**2) for p in step_dir)
 
         if rho < 0.25:
             radius *= 0.25
         elif rho > 0.75 and torch.isclose(param_norm, torch.tensor(radius), rtol=1e-8, atol=1e-10):
-            radius = min(2*radius, radius_init)
+            radius = min(2 * radius, radius_init)
 
         return rho, radius
 
@@ -371,12 +370,12 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         model_radius = self.lr_init if self.prev_lr_ is None else self.prev_lr_
 
         logging.info("Starting trust region loop with radius %g.", model_radius)
-        new_params, step_dir = self.trust_region.optimize_model(params, model_radius, d_p_list, eval_model)
+        new_params, step_dir = self.trust_region.optimize_model(params, model_radius, d_p_list)
 
         with torch.inference_mode():
             new_loss = eval_model(*new_params)
 
-        rho, model_radius = self.update_model_radius(model_radius, self.lr_init, prev_loss, d_p_list, new_loss, step_dir, eval_model)
+        rho, model_radius = self.update_model_radius(model_radius, self.lr_init, prev_loss, d_p_list, new_loss, step_dir)
 
         logging.info("Finished trust region search, rho = %g, final model radius = %g.", rho, model_radius)
 

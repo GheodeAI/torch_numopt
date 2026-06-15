@@ -13,6 +13,7 @@ from copy import copy
 
 logger = logging.getLogger(__name__)
 
+
 class CurvatureEstimator(ABC):
     def __init__(
         self,
@@ -54,7 +55,7 @@ class CurvatureEstimator(ABC):
         assert new_shape[0] == new_shape[1], "Hessian an the incorrect shape."
 
         return hess.reshape(new_shape)
-    
+
     def store_data(self, x: torch.Tensor, y: torch.Tensor, loss_fn: Callable):
         """
         Stores the necessary data for later use
@@ -63,10 +64,10 @@ class CurvatureEstimator(ABC):
         self.x_ = x
         self.y_ = y
         self.loss_fn_ = loss_fn
-    
+
     def reset(self):
         """
-        Resets the parameters of the curvature estimator. 
+        Resets the parameters of the curvature estimator.
 
         Used primarily for quasi-newton methods with memory.
         """
@@ -76,7 +77,7 @@ class CurvatureEstimator(ABC):
         """
         Obtains the second derivative approximation.
         """
-    
+
     @abstractmethod
     def hvp(self, step_dir: Iterable[torch.Tensor]) -> Iterable[torch.Tensor]:
         """
@@ -90,8 +91,3 @@ class CurvatureEstimator(ABC):
         Compute p B_k p^T
         with B being the scaling matrix and p the step direction
         """
-
-
-
-
-
