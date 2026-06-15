@@ -7,7 +7,7 @@ from torch.func import functional_call
 from ..utils import param_reshape_like
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
-from ..scaling_matrix_calculator import *
+from ..curvature import HutchinsonDiagonalApproximation
 
 
 class AdaHessian(NumericalOptimizer):
@@ -50,7 +50,6 @@ class AdaHessian(NumericalOptimizer):
             scaling_matrix=HutchinsonDiagonalApproximation(model=model, n_samples=1),
             lr_init=lr_init,
             lr_method=lr_method,
-            line_search_method="const",
         )
 
         self.samples = 5
@@ -124,6 +123,8 @@ class AdaHessianLS(LineSearchOptimizer):
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
+        max_iter: int = 20,
+        tol: float = 1e-8,
         k: float = 1,
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
@@ -133,7 +134,9 @@ class AdaHessianLS(LineSearchOptimizer):
             scaling_matrix=HutchinsonDiagonalApproximation(model=model, n_samples=1),
             lr_init=lr_init,
             lr_method=lr_method,
-            line_search=create_line_search_solver(method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau),
+            line_search=create_line_search_solver(
+                method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
+            ),
         )
 
         self.samples = 5

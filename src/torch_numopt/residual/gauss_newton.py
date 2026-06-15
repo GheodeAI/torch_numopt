@@ -2,7 +2,7 @@ from __future__ import annotations
 import torch.nn as nn
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
-from ..scaling_matrix_calculator import GaussNewtonBlockApproximation
+from ..curvature import GaussNewtonBlockApproximation
 
 
 class GaussNewton(NumericalOptimizer):
@@ -88,6 +88,8 @@ class GaussNewtonLS(LineSearchOptimizer):
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
+        max_iter: int = 20,
+        tol: float = 1e-8,
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         solver: str = "solve",
@@ -98,6 +100,8 @@ class GaussNewtonLS(LineSearchOptimizer):
             scaling_matrix=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=None),
             lr_init=lr_init,
             lr_method=lr_method,
-            line_search=create_line_search_solver(method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau),
+            line_search=create_line_search_solver(
+                method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
+            ),
             solver=solver,
         )

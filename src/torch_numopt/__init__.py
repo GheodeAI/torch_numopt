@@ -1,8 +1,8 @@
 from .custom_optimizer import CustomOptimizer
 from .line_search import LineSearchSolver, BacktrackingLineSearch, InterpolationLineSearch, BisectionLineSearch
+from .curvature_estimator import CurvatureEstimator
 
-from .scaling_matrix_calculator import (
-    ScalingMatrixCalculator,
+from .curvature import (
     ExactBlockHessianCalculator,
     GaussNewtonBlockApproximation,
     NaiveIdentityCalculator,
@@ -12,11 +12,6 @@ from .scaling_matrix_calculator import (
 from .numerical_optimizer import (
     NumericalOptimizer,
     LineSearchOptimizer,
-)
-
-from .modular_optimizer import (
-    ModularNumericalOptimizer,
-    ModularLineSearchOptimizer
 )
 
 from . import second_order
