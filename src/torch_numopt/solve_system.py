@@ -5,7 +5,7 @@ from .utils import fix_cond, pinv_svd_trunc, param_dot, param_add, param_scalar_
 
 logger = logging.getLogger(__name__)
 
-direct_solver_set = {"pinv", "pinv-truc", "solve", "lsqrs", "safe-lsqrs", "cholesky"}
+direct_solver_set = {"pinv", "pinv-trunc", "solve", "lsqrs", "safe-lsqrs", "cholesky"}
 iterative_solver_set = {"cg", "cg-trunc", "cr"}
 solver_set = direct_solver_set.union(iterative_solver_set).union({None})
 

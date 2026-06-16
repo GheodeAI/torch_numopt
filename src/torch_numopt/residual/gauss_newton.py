@@ -44,7 +44,7 @@ class GaussNewton(NumericalOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=None),
+            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=None),
             lr_init=lr_init,
             lr_method=lr_method,
             solver=solver,
@@ -97,7 +97,7 @@ class GaussNewtonLS(LineSearchOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=None),
+            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=None),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
