@@ -6,11 +6,12 @@ import logging
 import torch
 import torch.nn as nn
 from torch.func import functional_call
-from .utils import fix_stability, pinv_svd_trunc
+from .utils import fix_stability, pinv_svd_trunc, param_sub, param_scalar_prod
 from .custom_optimizer import CustomOptimizer
 from .line_search import LineSearchSolver
 from .trust_region import TrustRegionSolver
 from .curvature_estimator import CurvatureEstimator
+from .solve_system import solve_system
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: CurvatureEstimator,
+        curvature_estimator: CurvatureEstimator,
         lr_init: float = 1,
         lr_method: str | None = None,
         solver="solve",
@@ -49,7 +50,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
 
         self.lr_init = lr_init
         self.lr_method = lr_method
-        self.scaling_matrix = scaling_matrix
+        self.curvature_estimator = curvature_estimator
         self.solver = solver
 
         self.model = model
@@ -118,7 +119,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
 
         return new_lr
 
-    def apply_gradients(self, eval_model: Callable, params: list, d_p_list: list, h_list: list):
+    def apply_gradients(self, eval_model: Callable, params: list, d_p_list: list):
         """
         Updates the parameters of the network using a direction and a step length.
 
@@ -132,10 +133,10 @@ class NumericalOptimizer(CustomOptimizer, ABC):
         h_list: list, optional
         """
 
-        step_dir = self.get_step_direction(d_p_list, h_list)
+        step_dir = solve_system(self.curvature_estimator, d_p_list, solver=self.solver)
         lr = self.initialize_lr(self.lr_init, d_p_list, step_dir, eval_model, params)
 
-        new_params = tuple(p - lr * p_step for p, p_step in zip(params, step_dir))
+        new_params = param_sub(params, param_scalar_prod(lr, step_dir))
 
         # Apply new parameters
         for param, new_param in zip(params, new_params):
@@ -147,48 +148,6 @@ class NumericalOptimizer(CustomOptimizer, ABC):
         self.prev_step_dir_ = step_dir
         self.prev_grad_ = d_p_list
         self.prev_loss_ = eval_model(*new_params)
-
-    def get_step_direction(self, d_p_list, h_list) -> Iterable:
-        eps = torch.finfo(d_p_list[0].dtype).eps
-        if h_list is None:
-            logger.info("No curvature info. used, returning gradient.")
-            return d_p_list
-
-        if h_list[0].ndim == 2:
-            logger.info("Using matrix form of curvature, solving linear system...")
-            dir_list = [None] * len(d_p_list)
-            for i, (d_p, h) in enumerate(zip(d_p_list, h_list)):
-                cond_number = torch.linalg.cond(h)
-                if cond_number > 1e8:
-                    h = fix_stability(h)
-
-                    if logger.isEnabledFor(logging.DEBUG):
-                        new_cond_number = torch.linalg.cond(h)
-                        logger.debug("Numerical instability found, condition number was %g, new condition number is %g", cond_number, new_cond_number)
-
-                match self.solver:
-                    case "pinv":
-                        h_inv = h.pinverse()
-                        d2_p = (h_inv @ d_p.ravel()).reshape(d_p.shape)
-                    case "pinv-trunc":
-                        h_inv = pinv_svd_trunc(h)
-                        d2_p = (h_inv @ d_p.ravel()).reshape(d_p.shape)
-                    case "solve":
-                        d2_p = torch.linalg.solve(h, d_p.ravel()).reshape(d_p.shape)
-
-                dir_list[i] = d2_p
-
-        elif h_list[0].ndim == 1:
-            logger.info("Using diagonal form of curvature, dividing component-wise...")
-            dir_list = [d_p / (h + eps) for d_p, h in zip(d_p_list, h_list)]
-        elif h_list[0].ndim == 0:
-            logger.info("Using scalar form of curvature, dividing by the scalar...")
-            h = h_list[0]
-            dir_list = [d_p / (h + eps) for d_p in d_p_list]
-        else:
-            raise ValueError("Incorrectly dimensioned hessian.")
-
-        return dir_list
 
     @torch.no_grad()
     def step(
@@ -220,8 +179,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
             return loss_fn(out, y)
 
         # Calculate exact Hessian matrix
-        self.scaling_matrix.store_data(x, y, loss_fn)
-        h_list = self.scaling_matrix.scaling_matrix()
+        self.curvature_estimator.store_data(x, y, loss_fn)
 
         for group in self.param_groups:
             # Calculate gradients
@@ -235,7 +193,6 @@ class NumericalOptimizer(CustomOptimizer, ABC):
             self.apply_gradients(
                 params=params_with_grad,
                 d_p_list=d_p_list,
-                h_list=h_list,
                 eval_model=eval_model,
             )
 
@@ -261,17 +218,17 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: CurvatureEstimator,
+        curvature_estimator: CurvatureEstimator,
         line_search: LineSearchSolver,
         lr_init: float = 1,
         lr_method: str | None = None,
         solver="solve",
     ):
-        super().__init__(model=model, scaling_matrix=scaling_matrix, lr_init=lr_init, lr_method=lr_method, solver=solver)
+        super().__init__(model=model, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver)
 
         self.line_search = line_search
 
-    def apply_gradients(self, eval_model: Callable, params: list, d_p_list: list, h_list: list):
+    def apply_gradients(self, eval_model: Callable, params: list, d_p_list: list):
         """
         Updates the parameters of the network using a direction and a step length.
 
@@ -285,7 +242,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
         h_list: list, optional
         """
 
-        step_dir = self.get_step_direction(d_p_list, h_list)
+        step_dir = solve_system(self.curvature_estimator, d_p_list, solver=self.solver)
         lr_init = self.initialize_lr(self.lr_init, d_p_list, step_dir, eval_model, params)
 
         new_params, lr = self.line_search(params, step_dir, d_p_list, lr_init, eval_model)
@@ -324,12 +281,12 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
     def __init__(
         self,
         model: nn.Module,
-        scaling_matrix: CurvatureEstimator,
+        curvature_estimator: CurvatureEstimator,
         trust_region: TrustRegionSolver,
         radius_init: float = 1.0,
         solver="solve",
     ):
-        super().__init__(model=model, scaling_matrix=scaling_matrix, lr_init=radius_init, solver=solver)
+        super().__init__(model=model, curvature_estimator=curvature_estimator, lr_init=radius_init, solver=solver)
 
         self.trust_region = trust_region
 
@@ -352,7 +309,7 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
 
         return rho, radius
 
-    def apply_gradients(self, eval_model: Callable, params: list, d_p_list: list, h_list: list):
+    def apply_gradients(self, eval_model: Callable, params: list, d_p_list: list):
         """
         Updates the parameters of the network using a direction and a step length.
 
@@ -370,6 +327,7 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         model_radius = self.lr_init if self.prev_lr_ is None else self.prev_lr_
 
         logging.info("Starting trust region loop with radius %g.", model_radius)
+        a = self.trust_region.optimize_model(params, model_radius, d_p_list)
         new_params, step_dir = self.trust_region.optimize_model(params, model_radius, d_p_list)
 
         with torch.inference_mode():
@@ -390,49 +348,3 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         self.prev_step_dir_ = step_dir
         self.prev_grad_ = d_p_list
         self.prev_loss_ = eval_model(*new_params)
-
-    def step(
-        self,
-        x: torch.Tensor,
-        y: torch.Tensor,
-        loss_fn: nn.Module,
-    ):
-        """
-        Method to update the parameters of the Neural Network.
-
-        Parameters
-        ----------
-
-        x: torch.Tensor
-            Inputs of the Neural Network.
-        y: torch.Tensor
-            Targets of the Neural Network.
-        loss_fn: nn.Module
-            Loss function to be optimized.
-        """
-
-        device = self.params[0].device
-        x = x.to(device)
-        y = y.to(device)
-
-        def eval_model(*input_params):
-            out = functional_call(self.model, dict(zip(self.param_keys, input_params)), x)
-            return loss_fn(out, y)
-
-        self.scaling_matrix.store_data(x, y, loss_fn)
-
-        for group in self.param_groups:
-            # Calculate gradients
-            params_with_grad = []
-            d_p_list = []
-            for p in group["params"]:
-                if p.grad is not None:
-                    params_with_grad.append(p)
-                    d_p_list.append(p.grad)
-
-            self.apply_gradients(
-                params=params_with_grad,
-                d_p_list=d_p_list,
-                h_list=None,
-                eval_model=eval_model,
-            )

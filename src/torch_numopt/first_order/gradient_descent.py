@@ -38,7 +38,7 @@ class GradientDescent(NumericalOptimizer):
 
         super().__init__(
             model,
-            scaling_matrix=NaiveIdentityCalculator(model=model),
+            curvature_estimator=NaiveIdentityCalculator(model=model),
             lr_init=lr_init,
             lr_method=lr_method,
         )
@@ -83,7 +83,7 @@ class GradientDescentLS(LineSearchOptimizer):
 
         super().__init__(
             model,
-            scaling_matrix=NaiveIdentityCalculator(model=model),
+            curvature_estimator=NaiveIdentityCalculator(model=model),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
@@ -121,10 +121,10 @@ class GradientDescentTR(TrustRegionOptimizer):
         radius_init: float = 1.0,
         trust_region_method: str = "cauchy",
     ):
-        scaling_matrix = NaiveIdentityCalculator(model=model)
+        curvature_estimator = NaiveIdentityCalculator(model=model)
         super().__init__(
             model,
-            scaling_matrix=scaling_matrix,
-            trust_region=create_trust_region_solver(method=trust_region_method, scaling_matrix=scaling_matrix),
+            curvature_estimator=curvature_estimator,
+            trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=curvature_estimator),
             radius_init=radius_init,
         )

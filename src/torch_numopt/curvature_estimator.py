@@ -6,24 +6,19 @@ from abc import ABC, abstractmethod
 import logging
 import torch
 from torch import nn
-from functools import reduce, partial
-from .utils import param_reshape_like
-from torch.func import functional_call
-from copy import copy
+from functools import reduce
 
 logger = logging.getLogger(__name__)
 
 
 class CurvatureEstimator(ABC):
-    def __init__(
-        self,
-        model: nn.Module,
-        batch_size: int | None = None,
-    ):
+    def __init__(self, model: nn.Module, batch_size: int | None = None, ndim: int = 2, uses_blocks: bool = False):
         self.model = model
         self.param_keys = dict(model.named_parameters()).keys()
         self.params = tuple(model.parameters())
         self.batch_size = batch_size
+        self.ndim = ndim
+        self.uses_blocks = uses_blocks
 
     @staticmethod
     def _reshape_hessian(hess: torch.Tensor):

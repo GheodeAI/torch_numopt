@@ -1,9 +1,6 @@
 from __future__ import annotations
-from typing import Iterable
 import torch
 import torch.nn as nn
-from torch.autograd.functional import hessian
-from torch.func import functional_call
 from ..utils import param_reshape_like
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
@@ -47,7 +44,7 @@ class AdaHessian(NumericalOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=HutchinsonDiagonalApproximation(model=model, n_samples=1),
+            curvature_estimator=HutchinsonDiagonalApproximation(model=model, n_samples=1),
             lr_init=lr_init,
             lr_method=lr_method,
         )
@@ -131,7 +128,7 @@ class AdaHessianLS(LineSearchOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=HutchinsonDiagonalApproximation(model=model, n_samples=1),
+            curvature_estimator=HutchinsonDiagonalApproximation(model=model, n_samples=1),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(

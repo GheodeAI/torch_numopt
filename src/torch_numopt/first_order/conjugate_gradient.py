@@ -46,7 +46,7 @@ class ConjugateGradient(NumericalOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=NaiveIdentityCalculator(model=model),
+            curvature_estimator=NaiveIdentityCalculator(model=model),
             lr_init=lr_init,
             lr_method=lr_method,
         )
@@ -134,7 +134,7 @@ class ConjugateGradientLS(LineSearchOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=NaiveIdentityCalculator(model=model),
+            curvature_estimator=NaiveIdentityCalculator(model=model),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(

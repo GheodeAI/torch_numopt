@@ -18,7 +18,7 @@ class HutchinsonDiagonalApproximation(CurvatureEstimator):
         batch_size: int = None,
         n_samples: int = 1,
     ):
-        super().__init__(model=model, batch_size=batch_size)
+        super().__init__(model=model, batch_size=batch_size, ndim=1, uses_blocks=False)
         self.n_samples = n_samples
 
     def scaling_matrix(self) -> Iterable:

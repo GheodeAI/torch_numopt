@@ -55,7 +55,7 @@ class Newton(NumericalOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=ExactBlockHessianCalculator(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            curvature_estimator=ExactBlockHessianCalculator(model=model, batch_size=batch_size, damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             solver=solver,
@@ -118,7 +118,7 @@ class NewtonLS(LineSearchOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=ExactBlockHessianCalculator(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            curvature_estimator=ExactBlockHessianCalculator(model=model, batch_size=batch_size, damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
@@ -175,11 +175,11 @@ class NewtonTR(TrustRegionOptimizer):
         solver: str = "solve",
         batch_size: int | None = None,
     ):
-        scaling_matrix = ExactBlockHessianCalculator(model=model, batch_size=batch_size, damping=damping, mu=mu)
+        curvature_estimator = ExactBlockHessianCalculator(model=model, batch_size=batch_size, damping=damping, mu=mu)
         super().__init__(
             model,
-            scaling_matrix=scaling_matrix,
-            trust_region=create_trust_region_solver(method=tr_method, scaling_matrix=scaling_matrix),
+            curvature_estimator=curvature_estimator,
+            trust_region=create_trust_region_solver(method=tr_method, curvature_estimator=curvature_estimator, solver=solver),
             radius_init=radius_init,
             solver=solver,
         )

@@ -62,7 +62,7 @@ class LevenbergMarquardt(NumericalOptimizer):
 
         super().__init__(
             model,
-            scaling_matrix=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             solver=solver,
@@ -72,9 +72,6 @@ class LevenbergMarquardt(NumericalOptimizer):
         self.mu_dec = mu_dec
         self.mu_max = mu_max
         self.prev_loss = None
-
-        if fletcher and solver == "solve":
-            warnings.warn("Using 'solve' with fletcher's method usually doesn't work very well. Try using 'pinv' instead.")
 
     def step(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
         super().step(x, y, loss_fn)
@@ -101,7 +98,7 @@ class LevenbergMarquardt(NumericalOptimizer):
         if self.mu >= self.mu_max:
             self.mu = self.mu_max
 
-        self.scaling_matrix.mu = self.mu
+        self.curvature_estimator.mu = self.mu
 
 
 class LevenbergMarquardtLS(LineSearchOptimizer):
@@ -166,7 +163,7 @@ class LevenbergMarquardtLS(LineSearchOptimizer):
 
         super().__init__(
             model,
-            scaling_matrix=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
@@ -179,9 +176,6 @@ class LevenbergMarquardtLS(LineSearchOptimizer):
         self.mu_dec = mu_dec
         self.mu_max = mu_max
         self.prev_loss = None
-
-        if fletcher and solver == "solve":
-            warnings.warn("Using 'solve' with fletcher's method usually doesn't work very well. Try using 'pinv' instead.")
 
     def step(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
         super().step(x, y, loss_fn)
@@ -208,7 +202,7 @@ class LevenbergMarquardtLS(LineSearchOptimizer):
         if self.mu >= self.mu_max:
             self.mu = self.mu_max
 
-        self.scaling_matrix.mu = self.mu
+        self.curvature_estimator.mu = self.mu
 
 
 class LevenbergMarquardtTR(TrustRegionOptimizer):
@@ -271,7 +265,7 @@ class LevenbergMarquardtTR(TrustRegionOptimizer):
 
         super().__init__(
             model,
-            scaling_matrix=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau),
@@ -283,22 +277,20 @@ class LevenbergMarquardtTR(TrustRegionOptimizer):
         self.mu_max = mu_max
         self.prev_loss = None
 
-        if fletcher and solver == "solve":
-            warnings.warn("Using 'solve' with fletcher's method usually doesn't work very well. Try using 'pinv' instead.")
+    # def update_model_radius(self):
+    #     # loss_val = loss.detach().item()
+    #     if self.prev_loss is None:
+    #         self.prev_loss = loss_val
+    #         self._prev_params = [p.detach().clone() for p in self._params]
+    #     elif loss_val <= self.prev_loss:
+    #         self.prev_loss = loss_val
+    #         self._prev_params = [p.detach().clone() for p in self._params]
+    #         self.mu *= self.mu_dec
+    #     else:
+    #         self._params = self._prev_params
+    #         self.mu /= self.mu_dec
 
-    def update_model_radius(self):
-        if self.prev_loss is None:
-            self.prev_loss = loss_val
-            self._prev_params = [p.detach().clone() for p in self._params]
-        elif loss_val <= self.prev_loss:
-            self.prev_loss = loss_val
-            self._prev_params = [p.detach().clone() for p in self._params]
-            self.mu *= self.mu_dec
-        else:
-            self._params = self._prev_params
-            self.mu /= self.mu_dec
+    #     if self.mu >= self.mu_max:
+    #         self.mu = self.mu_max
 
-        if self.mu >= self.mu_max:
-            self.mu = self.mu_max
-
-        self.scaling_matrix.mu = self.mu
+    #     self.curvature_estimator.mu = self.mu

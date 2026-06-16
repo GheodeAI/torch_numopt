@@ -1,7 +1,8 @@
-""" """
-
+import logging
 import torch
 import torch.linalg
+
+logger = logging.getLogger(__name__)
 
 
 def param_sizes(params: tuple):
@@ -48,20 +49,29 @@ def param_reshape_like(params_flat: torch.Tensor, params: tuple):
 def param_flatten(params: tuple):
     return torch.hstack(_param_flatten_rec(params))
 
+
 def param_norm(params: tuple):
-    return torch.sqrt(sum(torch.sum(p*p) for p in params))
+    return torch.sqrt(sum(torch.sum(p * p) for p in params))
+
 
 def param_dot(params_a: tuple, params_b: tuple):
     return sum(torch.sum(p_a * p_b) for p_a, p_b in zip(params_a, params_b))
 
+
 def param_scalar_prod(scalar: float, params: tuple):
     return tuple(scalar * p for p in params)
+
 
 def param_add(params_a: tuple, params_b: tuple):
     return tuple(p_a + p_b for p_a, p_b in zip(params_a, params_b))
 
+
 def param_sub(params_a: tuple, params_b: tuple):
     return tuple(p_a - p_b for p_a, p_b in zip(params_a, params_b))
+
+
+def param_neg(params: tuple):
+    return tuple(-p for p in params)
 
 
 def _param_flatten_rec(params: list):
@@ -73,55 +83,3 @@ def _param_flatten_rec(params: list):
             all_params += param_flatten(i)
 
     return all_params
-
-
-def fix_stability(mat: torch.Tensor):
-    """
-    Procedure to adjust a matrix by adding a very small value to the diagonal to avoid numerical
-    instability problems.
-
-    Parameters
-    ----------
-
-    mat: torch.Tensor
-        Ill conditioned matrix.
-
-    Returns
-    -------
-    fixed_mat: torch.Tensor
-        (Hopefully) Well conditioned matrix.
-
-    """
-
-    return mat + torch.eye(mat.shape[0], device=mat.device) * torch.finfo(mat.dtype).eps
-
-
-def pinv_svd_trunc(mat: torch.Tensor, thresh: float = 1e-4):
-    """
-    Procedure to calculate the pseudoinverse of a matrix by using truncated SVD in order to maintain
-    numerical stability.
-
-    Parameters
-    ----------
-
-    mat: torch.Tensor
-        Problematic matrix that we want to invert.
-    thresh: float
-        Threshold applied to the S matrix in the SVD procedure.
-
-    Returns
-    -------
-    inverted_mat: torch.Tensor
-       Pseudoinverse of the input matrix.
-    """
-
-    U, S, Vt = torch.linalg.svd(mat)
-
-    # max_val = torch.max(S)
-    # S_tresh = S < thresh * max_val
-    S_tresh = S < thresh
-
-    S_inv_trunc = 1.0 / S
-    S_inv_trunc[S_tresh] = 0
-
-    return Vt.T @ torch.diag(S_inv_trunc) @ U.T
