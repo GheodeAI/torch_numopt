@@ -4,8 +4,8 @@ import logging
 from copy import copy
 import torch
 from torch import nn
-from functools import reduce, partial
-from ..utils import param_reshape_like
+from functools import partial
+from ..utils import param_dot, param_scalar_prod, param_add
 from torch.func import functional_call
 from ..curvature_estimator import CurvatureEstimator
 
@@ -24,7 +24,7 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
         damping: Optional[str] = None,
         mu: float = 1e-4,
     ):
-        super().__init__(model=model, batch_size=batch_size)
+        super().__init__(model=model, batch_size=batch_size, ndim=2, uses_blocks=True)
         self.damping = damping
         self.mu = mu
 
@@ -124,7 +124,7 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
         if self.batch_size is None or self.batch_size >= len(self.x_):
             eval_model = partial(eval_model_batch, x=self.x_, y=self.y_)
             _, hess_dot_step = torch.autograd.functional.hvp(eval_model, self.params, v=tuple(step_dir))
-            hess_dot_step = tuple(hv_i * scale for hv_i in hess_dot_step)
+            hess_dot_step = param_scalar_prod(scale, hess_dot_step)
         else:
             batch_start = torch.arange(0, len(self.x_), self.batch_size)
 
@@ -142,15 +142,22 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
                 _, hess_dot_step_batch = torch.autograd.functional.hvp(eval_model, self.params, v=tuple(step_dir))
 
                 if hess_dot_step is None:
-                    hess_dot_step = tuple(batch_hv_i * scale for batch_hv_i in hess_dot_step_batch)
+                    hess_dot_step = param_scalar_prod(scale, hess_dot_step_batch)
                 else:
-                    hess_dot_step = tuple(hv_i + batch_hv_i * scale for hv_i, batch_hv_i in zip(hess_dot_step, hess_dot_step_batch))
+                    hess_dot_step = param_add(hess_dot_step, param_scalar_prod(scale, hess_dot_step_batch))
                 logger.info("Computed batch %d for the exact hessian vector product...", i)
+
+        # Damp vector
+        if self.damping is not None:
+            logger.info("Applying damping to the exact hessian...")
+            if self.damping == "identity":
+                hess_dot_step = param_add(hess_dot_step, param_scalar_prod(self.mu, step_dir))
+            elif self.damping == "fletcher":
+                raise NotImplementedError("Fletcher damping not available for hvp.")
+            else:
+                raise ValueError(f"Invalid damping strategy {self.damping}.")
 
         return hess_dot_step
 
     def quadratic_form(self, d_p_list: Iterable[torch.Tensor]) -> torch.Tensor:
-        scaling_matrix_dot_grad = self.hvp(d_p_list)
-        quadratic_form = sum(torch.sum(vi * hvi) for vi, hvi in zip(d_p_list, scaling_matrix_dot_grad))
-
-        return quadratic_form
+        return param_dot(d_p_list, self.hvp(d_p_list))

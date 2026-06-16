@@ -4,10 +4,10 @@ import logging
 from copy import copy
 import torch
 from torch import nn
-from functools import reduce, partial
-from ..utils import param_reshape_like
+from functools import partial
 from torch.func import functional_call
 from ..curvature_estimator import CurvatureEstimator
+from ..utils import param_dot, param_scalar_prod, param_add
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,9 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
         vectorize: bool = True,
         damping: Optional[str] = None,
         mu: float = 1e-4,
+        uses_blocks: bool = True,
     ):
-        super().__init__(model=model, batch_size=batch_size)
+        super().__init__(model=model, batch_size=batch_size, ndim=2, uses_blocks=uses_blocks)
         self.vectorize = vectorize
         self.damping = damping
         self.mu = mu
@@ -57,14 +58,11 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
         """
         model_params = tuple(self.model.parameters())
 
-        scale = 2 / len(self.x_) if self.loss_fn_.reduction == "mean" else 1
-
-        residual_fn = copy(self.loss_fn_)
-        residual_fn.reduction = "none"
+        scale = 1 / len(self.x_) if self.loss_fn_.reduction == "mean" else 1
 
         def get_residuals_batch(*input_params, x, y):
             out = functional_call(self.model, dict(zip(self.param_keys, input_params)), x)
-            return residual_fn(out, y)
+            return out - y
 
         # Calculate approximate Hessian matrix
         if self.batch_size is None or self.batch_size >= len(self.x_):
@@ -82,7 +80,7 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
 
             logger.info("Computing the Gauss-Newton approximate Hessian matrix split in %d batches of size %d.", len(batch_start), self.batch_size)
 
-            h_list = []
+            h_list = None
             for i, start in enumerate(batch_start):
                 # Prepare batch
                 x_batch = self.x_[start : start + self.batch_size]
@@ -97,10 +95,10 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
                     h_list_batch[j_idx] = self._reshape_hessian(j.T @ j) * scale
 
                 # Aggregate result
-                if h_list == []:
+                if h_list is None:
                     h_list = h_list_batch
                 else:
-                    h_list = [batch_h + prev_h for batch_h, prev_h in zip(h_list, h_list_batch)]
+                    h_list = param_add(h_list, h_list_batch)
 
                 logger.info("Computed batch %d for the approximate hessian...", i)
 
@@ -111,35 +109,31 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
                 if self.damping == "identity":
                     h_list[i] = h + self.mu * torch.eye(h.shape[0], device=h.device)
                 elif self.damping == "fletcher":
-                    h_list[i] = h + self.mu * h.diagonal()
+                    h_list[i] = h + self.mu * torch.diag(h.diagonal())
                 else:
                     raise ValueError("Invalid damping strategy.")
 
         return h_list
 
-    def hvp(self, step_dir):
+    def _jvp(self, step_dir):
         model_params = tuple(self.model.parameters())
-
-        scale = 2 / len(self.x_) if self.loss_fn_.reduction == "mean" else 1
-
-        residual_fn = copy(self.loss_fn_)
-        residual_fn.reduction = "none"
+        step_dir = tuple(step_dir)
 
         def get_residuals_batch(*input_params, x, y):
             out = functional_call(self.model, dict(zip(self.param_keys, input_params)), x)
-            return residual_fn(out, y)
+            return out - y
 
         if self.batch_size is None or self.batch_size >= len(self.x_):
-            logger.info("Computing the Gauss-Newton approximate Hessian matrix.")
+            logger.info("Computing the Jacobian vector product.")
             get_residuals = partial(get_residuals_batch, x=self.x_, y=self.y_)
-            jac_dot_step = torch.autograd.functional.jvp(get_residuals, model_params, tangents=step_dir)
+            _, jac_dot_step = torch.autograd.functional.jvp(get_residuals, model_params, v=step_dir)
         else:
             # Calculate hessian for each batch and add the results
             batch_start = torch.arange(0, len(self.x_), self.batch_size)
 
-            logger.info("Computing the Gauss-Newton approximate Hessian matrix split in %d batches of size %d.", len(batch_start), self.batch_size)
+            logger.info("Computing the Jacobian vector product, split in %d batches of size %d.", len(batch_start), self.batch_size)
 
-            h_list = []
+            jac_dot_step = None
             for i, start in enumerate(batch_start):
                 # Prepare batch
                 x_batch = self.x_[start : start + self.batch_size]
@@ -147,16 +141,82 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
 
                 # Calculate approximate hessian of the batch
                 get_residuals = partial(get_residuals_batch, x=x_batch, y=y_batch)
-                jac_dot_step = torch.autograd.functional.jvp(get_residuals, model_params, tangents=step_dir)
+                _, jac_dot_step_batch = torch.autograd.functional.jvp(get_residuals, model_params, v=step_dir)
 
-                hess_dot_step += hess_dot_step_batch
-                logger.info("Computed batch %d for the Gauss-newton approximate hessian...", i)
+                if jac_dot_step is None:
+                    jac_dot_step = jac_dot_step_batch
+                else:
+                    jac_dot_step = param_add(jac_dot_step, jac_dot_step_batch)
 
-        return hess_dot_step * scale
+                logger.info("Computed batch %d for the Jacobian vector product...", i)
 
-    def quadratic_form(d_p_list: Iterable[torch.Tensor]) -> torch.Tensor:
+        return jac_dot_step
 
-        scaling_matrix_dot_grad = self.hvp(d_p_list)
-        quadratic_form = sum(torch.sum(hvi * hvi) for hvi in zip(scaling_matrix_dot_grad))  # p Jt J p = |Jp|^2
+    def hvp(self, step_dir):
+        model_params = tuple(self.model.parameters())
+        step_dir = tuple(step_dir)
 
-        return quadratic_form
+        scale = 1 / len(self.x_) if self.loss_fn_.reduction == "mean" else 1
+
+        def get_residuals_batch(*input_params, x, y):
+            out = functional_call(self.model, dict(zip(self.param_keys, input_params)), x)
+            return out - y
+
+        if self.batch_size is None or self.batch_size >= len(self.x_):
+            logger.info("Computing the Gauss-Newton Hessian-vector product.")
+            get_residuals = partial(get_residuals_batch, x=self.x_, y=self.y_)
+            residuals, jac_dot_step = torch.autograd.functional.jvp(get_residuals, model_params, v=step_dir)
+            _, hess_approx = torch.autograd.functional.vjp(get_residuals, model_params, v=jac_dot_step)
+        else:
+            # Calculate hessian for each batch and add the results
+            batch_start = torch.arange(0, len(self.x_), self.batch_size)
+
+            logger.info("Computing the Gauss-Newton Hessian-vector product, split in %d batches of size %d.", len(batch_start), self.batch_size)
+
+            hess_approx = None
+            for i, start in enumerate(batch_start):
+                # Prepare batch
+                x_batch = self.x_[start : start + self.batch_size]
+                y_batch = self.y_[start : start + self.batch_size]
+
+                # Calculate approximate hessian of the batch
+                get_residuals = partial(get_residuals_batch, x=x_batch, y=y_batch)
+                residuals, jac_dot_step_batch = torch.autograd.functional.jvp(get_residuals, model_params, v=step_dir)
+                _, hess_approx_batch = torch.autograd.functional.vjp(get_residuals, model_params, v=jac_dot_step_batch)
+
+                if hess_approx is None:
+                    hess_approx = hess_approx_batch
+                else:
+                    hess_approx = param_add(hess_approx, hess_approx_batch)
+
+                logger.info("Computed batch %d for the Gauss-Newton hvp...", i)
+
+        # Damp vector
+        if self.damping is not None:
+            logger.info("Applying damping to the Gauss-Newton hvp...")
+            if self.damping == "identity":
+                hess_approx = param_add(hess_approx, param_scalar_prod(self.mu, step_dir))
+            elif self.damping == "fletcher":
+                raise NotImplementedError("Fletcher damping not available for hvp.")
+            else:
+                raise ValueError(f"Invalid damping strategy {self.damping}.")
+
+        return param_scalar_prod(scale, hess_approx)
+
+    def quadratic_form(self, d_p_list: Iterable[torch.Tensor]) -> torch.Tensor:
+        scale = 1 / len(self.x_) if self.loss_fn_.reduction == "mean" else 1
+
+        Jp = self._jvp(d_p_list)
+        quadratic_form = param_dot(Jp, Jp)
+
+        # Damp vector
+        if self.damping is not None:
+            logger.info("Applying damping to the exact hessian...")
+            if self.damping == "identity":
+                quadratic_form = quadratic_form + self.mu * param_dot(d_p_list, d_p_list)
+            elif self.damping == "fletcher":
+                raise NotImplementedError("Fletcher damping not available for hvp.")
+            else:
+                raise ValueError(f"Invalid damping strategy {self.damping}.")
+
+        return scale * quadratic_form

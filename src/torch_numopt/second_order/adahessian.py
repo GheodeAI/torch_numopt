@@ -47,7 +47,7 @@ class AdaHessian(NumericalOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=HutchinsonDiagonalApproximation(model=model, n_samples=1),
+            curvature_estimator=HutchinsonDiagonalApproximation(model=model, n_samples=1),
             lr_init=lr_init,
             lr_method=lr_method,
         )
@@ -131,7 +131,7 @@ class AdaHessianLS(LineSearchOptimizer):
     ):
         super().__init__(
             model,
-            scaling_matrix=HutchinsonDiagonalApproximation(model=model, n_samples=1),
+            curvature_estimator=HutchinsonDiagonalApproximation(model=model, n_samples=1),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
