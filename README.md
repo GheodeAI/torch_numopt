@@ -21,8 +21,9 @@ Note: Approximate Greatest Descent is not interesting enough to be included, the
 - [x] Stochastic Gradient Descent with Line Search
 - [x] Conjugate Gradient
 - [x] AdaHessian
+- [x] Hessian-free / truncated Newton
 - [ ] Natural gradient descent
 - [ ] Quasi-Newton (LBFGS already in pytorch)
-- [ ] Hessian-free / truncated Newton
+
 
 If you feel like there's a missing algorithm you can open an issue with the name of the algorithm with some references and a justification why you think it should be included in the package.
