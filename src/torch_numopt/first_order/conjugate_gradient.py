@@ -7,8 +7,53 @@ from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
 from ..curvature import NaiveIdentityCalculator
 from ..utils import param_reshape_like
 
+class ConjugateGradientMixin:
+    def __init__(
+        self,
+        *args,
+        cg_method: str = "PRP+",
+        **kwargs
+    ):
+        super().__init__(*args, **kwargs)
 
-class ConjugateGradient(NumericalOptimizer):
+        # Conjugate gradient memory
+        self.cg_method = cg_method
+
+    def get_step_direction(self, params, d_p_list):
+        """ """
+
+        if self.prev_grad_ is None:
+            return d_p_list
+
+        grad = torch.hstack([i.ravel() for i in d_p_list])
+        prev_grad = torch.hstack([i.ravel() for i in self.prev_grad_])
+        prev_step = torch.hstack([i.ravel() for i in self.prev_step_dir_])
+
+        res = -grad
+        prev_res = -prev_grad
+
+        eps = torch.finfo(res.dtype).eps
+        match self.cg_method:
+            case "FR":
+                beta = torch.dot(res, res) / (torch.dot(prev_res, prev_res) + eps)
+            case "PR":
+                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
+            case "PRP+":
+                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
+                beta = torch.relu(beta)
+            case "HS":
+                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_step, res - prev_res) + eps)
+            case "DY":
+                beta = torch.dot(res, res) / (torch.dot(-prev_step, res - prev_res) + eps)
+            case _:
+                raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'.")
+
+        # Invert sign since we update the weights like x - lr*step
+        next_dir = param_reshape_like(grad - beta * prev_step, d_p_list)
+        return next_dir
+
+
+class ConjugateGradient(ConjugateGradientMixin, NumericalOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
     https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
@@ -49,46 +94,11 @@ class ConjugateGradient(NumericalOptimizer):
             curvature_estimator=NaiveIdentityCalculator(model=model),
             lr_init=lr_init,
             lr_method=lr_method,
+            cg_method=cg_method
         )
 
-        # Conjugate gradient memory
-        self.cg_method = cg_method
 
-    def get_step_direction(self, d_p_list, _):
-        """ """
-
-        if self.prev_grad_ is None:
-            return d_p_list
-
-        grad = torch.hstack([i.ravel() for i in d_p_list])
-        prev_grad = torch.hstack([i.ravel() for i in self.prev_grad_])
-        prev_step = torch.hstack([i.ravel() for i in self.prev_step_dir_])
-
-        res = -grad
-        prev_res = -prev_grad
-
-        eps = torch.finfo(res.dtype).eps
-        match self.cg_method:
-            case "FR":
-                beta = torch.dot(res, res) / (torch.dot(prev_res, prev_res) + eps)
-            case "PR":
-                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
-            case "PRP+":
-                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
-                beta = torch.relu(beta)
-            case "HS":
-                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_step, res - prev_res) + eps)
-            case "DY":
-                beta = torch.dot(res, res) / (torch.dot(-prev_step, res - prev_res) + eps)
-            case _:
-                raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'.")
-
-        # Invert sign since we update the weights like x - lr*step
-        next_dir = param_reshape_like(grad - beta * prev_step, d_p_list)
-        return next_dir
-
-
-class ConjugateGradientLS(LineSearchOptimizer):
+class ConjugateGradientLS(ConjugateGradientMixin, LineSearchOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
     https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
@@ -130,7 +140,6 @@ class ConjugateGradientLS(LineSearchOptimizer):
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         cg_method: str = "PRP+",
-        **kwargs,
     ):
         super().__init__(
             model,
@@ -140,40 +149,5 @@ class ConjugateGradientLS(LineSearchOptimizer):
             line_search=create_line_search_solver(
                 method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
             ),
+            cg_method=cg_method
         )
-
-        # Conjugate gradient memory
-        self.cg_method = cg_method
-
-    def get_step_direction(self, d_p_list, _):
-        """ """
-
-        if self.prev_grad_ is None:
-            return d_p_list
-
-        grad = torch.hstack([i.ravel() for i in d_p_list])
-        prev_grad = torch.hstack([i.ravel() for i in self.prev_grad_])
-        prev_step = torch.hstack([i.ravel() for i in self.prev_step_dir_])
-
-        res = -grad
-        prev_res = -prev_grad
-
-        eps = torch.finfo(res.dtype).eps
-        match self.cg_method:
-            case "FR":
-                beta = torch.dot(res, res) / (torch.dot(prev_res, prev_res) + eps)
-            case "PR":
-                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
-            case "PRP+":
-                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
-                beta = torch.relu(beta)
-            case "HS":
-                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_step, res - prev_res) + eps)
-            case "DY":
-                beta = torch.dot(res, res) / (torch.dot(-prev_step, res - prev_res) + eps)
-            case _:
-                raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'.")
-
-        # Invert sign since we update the weights like x - lr*step
-        next_dir = param_reshape_like(grad - beta * prev_step, d_p_list)
-        return next_dir

@@ -43,36 +43,41 @@ def param_reshape_like(params_flat: torch.Tensor, params: tuple):
         result.append(params_flat[acc1:acc2].reshape(p.shape))
         acc1 += flat_size
 
-    return result
+    return tuple(result)
 
+def param_zero_like(params: tuple):
+    return tuple(torch.zeros_like(p) for p in params)
 
 def param_flatten(params: tuple):
     return torch.hstack(_param_flatten_rec(params))
 
-
 def param_norm(params: tuple):
     return torch.sqrt(sum(torch.sum(p * p) for p in params))
-
 
 def param_dot(params_a: tuple, params_b: tuple):
     return sum(torch.sum(p_a * p_b) for p_a, p_b in zip(params_a, params_b))
 
-
 def param_scalar_prod(scalar: float, params: tuple):
     return tuple(scalar * p for p in params)
+
+def param_prod(params_a: tuple, params_b: tuple):
+    return tuple(p_a * p_b for p_a, p_b in zip(params_a, params_b))
 
 
 def param_add(params_a: tuple, params_b: tuple):
     return tuple(p_a + p_b for p_a, p_b in zip(params_a, params_b))
 
-
 def param_sub(params_a: tuple, params_b: tuple):
     return tuple(p_a - p_b for p_a, p_b in zip(params_a, params_b))
 
+def param_transpose(params: tuple):
+    return tuple(p.T for p in params)
 
 def param_neg(params: tuple):
     return tuple(-p for p in params)
 
+def param_copy(params: tuple):
+    return tuple(p.clone() for p in params)
 
 def _param_flatten_rec(params: list):
     all_params = []

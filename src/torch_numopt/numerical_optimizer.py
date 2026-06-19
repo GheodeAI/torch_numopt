@@ -1,12 +1,12 @@
 """ """
 
 from abc import ABC
-from typing import Callable, Iterable
+from typing import Callable
 import logging
 import torch
 import torch.nn as nn
 from torch.func import functional_call
-from .utils import fix_stability, pinv_svd_trunc, param_sub, param_scalar_prod
+from .utils import param_sub, param_scalar_prod
 from .custom_optimizer import CustomOptimizer
 from .line_search import LineSearchSolver
 from .trust_region import TrustRegionSolver
@@ -118,6 +118,9 @@ class NumericalOptimizer(CustomOptimizer, ABC):
         logger.info("Initial lr generated = %g with method %s and initial guess %g.", new_lr, self.lr_method, lr)
 
         return new_lr
+    
+    def get_step_direction(self, params, d_p_list):
+        return solve_system(self.curvature_estimator, d_p_list, solver=self.solver)
 
     def apply_gradients(self, eval_model: Callable, params: list, d_p_list: list):
         """
@@ -133,7 +136,7 @@ class NumericalOptimizer(CustomOptimizer, ABC):
         h_list: list, optional
         """
 
-        step_dir = solve_system(self.curvature_estimator, d_p_list, solver=self.solver)
+        step_dir = self.get_step_direction(params, d_p_list)
         lr = self.initialize_lr(self.lr_init, d_p_list, step_dir, eval_model, params)
 
         new_params = param_sub(params, param_scalar_prod(lr, step_dir))
@@ -242,7 +245,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
         h_list: list, optional
         """
 
-        step_dir = solve_system(self.curvature_estimator, d_p_list, solver=self.solver)
+        step_dir = self.get_step_direction(params, d_p_list)
         lr_init = self.initialize_lr(self.lr_init, d_p_list, step_dir, eval_model, params)
 
         new_params, lr = self.line_search(params, step_dir, d_p_list, lr_init, eval_model)
