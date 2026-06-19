@@ -3,8 +3,7 @@ from typing import Iterable
 import logging
 import torch
 from torch import nn
-from functools import reduce, partial
-from ..utils import param_reshape_like
+from ..utils import param_reshape_like, param_scalar_prod, param_prod, param_add, param_zero_like
 from torch.func import functional_call
 from ..curvature_estimator import CurvatureEstimator
 
@@ -29,32 +28,31 @@ class HutchinsonDiagonalApproximation(CurvatureEstimator):
             out = functional_call(self.model, dict(zip(self.param_keys, input_params)), self.x_)
             return self.loss_fn_(out, self.y_)
 
-        h_diag_flat = torch.zeros_like(params_flat)
+        h_diag = param_zero_like(model_params)
         logger.info("Computing diagonal Hutchinson approximation of the hessian with %d samples.", self.n_samples)
         for i in range(self.n_samples):
             # Rademacher sample
-            z_flat = 2 * torch.bernoulli(torch.full_like(params_flat, 0.5, device=params_flat.device)) - 1
-            z = tuple(param_reshape_like(z_flat, model_params))
+            z_flat = 2 * torch.randint(0, 2, size=params_flat.size(), device=params_flat.device, dtype=torch.uint8).float() - 1
+            z = param_reshape_like(z_flat, model_params)
 
             # Pytorch documentation recommends doing (vH)^T instead of Hv directly
             _, Hz = torch.autograd.functional.vhp(eval_model, model_params, v=z, create_graph=False)
-            Hz_flat = torch.hstack([i.ravel() for i in Hz])
 
-            h_diag_flat += z_flat * Hz_flat
+            h_diag = param_add(h_diag, param_prod(z, Hz))
 
             logger.info("Calculated approximation for random sample number %d...", i)
-        h_diag_flat /= self.n_samples
 
-        h_diag = param_reshape_like(h_diag_flat, model_params)
+        h_diag = param_scalar_prod(1/self.n_samples, h_diag)
+
         return h_diag
 
     def hvp(self, step_dir):
-        diag_hessian = self.scaling_matrix
-        return tuple(p * h for p, h in zip(step_dir, diag_hessian))
+        diag_hessian = self.scaling_matrix()
+        return param_prod(step_dir, diag_hessian)
 
-    def quadratic_form(d_p_list: Iterable[torch.Tensor]) -> torch.Tensor:
+    def quadratic_form(self, d_p_list: Iterable[torch.Tensor]) -> torch.Tensor:
 
         scaling_matrix_dot_grad = self.hvp(d_p_list)
-        quadratic_form = sum(torch.sum(vi * hvi) for vi, hvi in zip(d_p_list, scaling_matrix_dot_grad))
+        quadratic_form = param_scalar_prod(d_p_list, scaling_matrix_dot_grad)
 
         return quadratic_form

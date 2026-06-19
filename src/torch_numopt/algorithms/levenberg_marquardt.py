@@ -4,7 +4,6 @@ import torch.nn as nn
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
 from ..curvature import GaussNewtonBlockApproximation
-import warnings
 
 
 class LevenbergMarquardt(NumericalOptimizer):

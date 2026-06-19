@@ -236,7 +236,7 @@ class InterpolationLineSearch(LineSearchSolver):
 
         # Respect sign convention in "Numerical Optimization" by Noceadal J., which assumes maximization.
         # The sign is reverted at the end of the function.
-        lr_0 = -lr_init
+        lr_0 = -torch.tensor(lr_init, device=dir_deriv.device, dtype=dir_deriv.dtype)
 
         # Quadratic interpolation to obtain a new point
         # Calculate first interpolation point

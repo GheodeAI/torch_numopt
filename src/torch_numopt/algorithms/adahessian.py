@@ -6,8 +6,57 @@ from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
 from ..curvature import HutchinsonDiagonalApproximation
 
+class AdaHessianMixin:
+    def __init__(
+        self,
+        *args,
+        beta1=0.9,
+        beta2=0.999,
+        k: float = 1,
+        eps: float = 1e-4,
+        skip_iters: int = 0,
+        **kwargs
+    ):
+        super().__init__(*args, **kwargs)
 
-class AdaHessian(NumericalOptimizer):
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.beta1_acc = beta1
+        self.beta2_acc = beta2
+
+        self.prev_first_moment = 0
+        self.prev_hess_moment = 0
+        self.k = k
+        self.eps = eps
+        self.skip_iters = skip_iters
+
+    def get_step_direction(self, params, d_p_list):
+        """ """
+        h_list = self.curvature_estimator.scaling_matrix()
+
+        grad = torch.hstack([i.flatten() for i in d_p_list])
+        h_diag = torch.hstack([i.flatten() for i in h_list])
+        eps = self.eps
+
+        # Calculate first unbiased moment of the gradient
+        first_moment = self.beta1 * self.prev_first_moment + (1 - self.beta1) * grad
+        first_moment_unbias = first_moment / (1 - self.beta1_acc)
+        self.prev_first_moment = first_moment
+        self.beta1_acc *= self.beta1
+
+        # Calculate second unbiased moment of the hessian diagonal
+        hess_moment = self.beta2 * self.prev_hess_moment + (1 - self.beta2) * h_diag * h_diag
+        hess_moment_unbias = hess_moment / (1 - self.beta2_acc)
+        self.prev_hess_moment = hess_moment
+        self.beta2_acc *= self.beta2
+
+        # Calculate the next step direction
+        next_dir_flat = first_moment_unbias / (hess_moment_unbias ** (0.5 * self.k) + eps)
+
+        return param_reshape_like(next_dir_flat, d_p_list)
+
+
+class AdaHessian(AdaHessianMixin, NumericalOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
 
@@ -40,52 +89,25 @@ class AdaHessian(NumericalOptimizer):
         beta1=0.9,
         beta2=0.999,
         k: float = 1,
-        skip_iters=0,
+        eps: float = 1e-4,
+        skip_iters: int = 0,
+        n_samples:int = 1
     ):
         super().__init__(
             model,
-            curvature_estimator=HutchinsonDiagonalApproximation(model=model, n_samples=1),
+            curvature_estimator=HutchinsonDiagonalApproximation(model=model, n_samples=n_samples),
             lr_init=lr_init,
             lr_method=lr_method,
+            beta1=beta1,
+            beta2=beta2,
+            k=k,
+            eps=eps,
+            skip_iters=skip_iters
         )
 
-        self.samples = 5
-        self.skip_iters = skip_iters
-        self.beta1 = beta1
-        self.beta2 = beta2
-        self.beta1_acc = beta1
-        self.beta2_acc = beta2
-
-        self.prev_first_moment = 0
-        self.prev_hess_moment = 0
-        self.k = k
-
-    def get_step_direction(self, d_p_list, h_list):
-        """ """
-        grad = torch.hstack([i.flatten() for i in d_p_list])
-        h_diag = torch.hstack([i.flatten() for i in h_list])
-        eps = torch.finfo(grad.dtype).eps
-
-        # Calculate first unbiased moment of the gradient
-        first_moment = self.beta1 * self.prev_first_moment + (1 - self.beta1) * grad
-        self.prev_first_moment = first_moment
-        first_moment_unbias = first_moment / (1 - self.beta1_acc)
-        self.beta1_acc *= self.beta1
-
-        # Calculate second unbiased moment of the hessian diagonal
-        hess_moment = self.beta2 * self.prev_hess_moment + (1 - self.beta2) * h_diag * h_diag
-        self.prev_hess_moment = hess_moment
-        hess_moment_unbias = hess_moment / (1 - self.beta2_acc)
-        self.beta2_acc *= self.beta2
-
-        # Calculate the next step direction
-        next_dir_flat = first_moment_unbias / (hess_moment_unbias ** (0.5 * self.k) + eps)
-
-        next_dir = param_reshape_like(next_dir_flat, d_p_list)
-        return next_dir
 
 
-class AdaHessianLS(LineSearchOptimizer):
+class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
 
@@ -123,6 +145,8 @@ class AdaHessianLS(LineSearchOptimizer):
         max_iter: int = 20,
         tol: float = 1e-8,
         k: float = 1,
+        eps: float = 1e-4,
+        skip_iters: int = 0,
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
     ):
@@ -134,39 +158,9 @@ class AdaHessianLS(LineSearchOptimizer):
             line_search=create_line_search_solver(
                 method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
             ),
+            beta1=beta1,
+            beta2=beta2,
+            k=k,
+            eps=eps,
+            skip_iters=skip_iters
         )
-
-        self.samples = 5
-        self.skip_iters = 0
-        self.beta1 = beta1
-        self.beta2 = beta2
-        self.beta1_acc = beta1
-        self.beta2_acc = beta2
-
-        self.prev_first_moment = 0
-        self.prev_hess_moment = 0
-        self.k = k
-
-    def get_step_direction(self, d_p_list, h_list):
-        """ """
-        grad = torch.hstack([i.flatten() for i in d_p_list])
-        h_diag = torch.hstack([i.flatten() for i in h_list])
-        eps = torch.finfo(grad.dtype).eps
-
-        # Calculate first unbiased moment of the gradient
-        first_moment = self.beta1 * self.prev_first_moment + (1 - self.beta1) * grad
-        self.prev_first_moment = first_moment
-        first_moment_unbias = first_moment / (1 - self.beta1_acc)
-        self.beta1_acc *= self.beta1
-
-        # Calculate second unbiased moment of the hessian diagonal
-        hess_moment = self.beta2 * self.prev_hess_moment + (1 - self.beta2) * h_diag * h_diag
-        self.prev_hess_moment = hess_moment
-        hess_moment_unbias = hess_moment / (1 - self.beta2_acc)
-        self.beta2_acc *= self.beta2
-
-        # Calculate the next step direction
-        next_dir_flat = first_moment_unbias / (hess_moment_unbias ** (0.5 * self.k) + eps)
-
-        next_dir = param_reshape_like(next_dir_flat, d_p_list)
-        return next_dir

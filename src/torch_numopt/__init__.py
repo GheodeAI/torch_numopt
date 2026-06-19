@@ -22,3 +22,6 @@ from .first_order import *
 
 from . import residual
 from .residual import *
+
+from . import quasinewton
+from .quasinewton import *
