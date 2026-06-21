@@ -1,22 +1,19 @@
 """ """
 
 from __future__ import annotations
-from typing import Iterable, Callable
+from typing import Iterable
 from abc import ABC, abstractmethod
 import logging
 import torch
-from torch import nn
 from functools import reduce
+from .objective import ObjectiveFunction
+from .utils import Params
 
 logger = logging.getLogger(__name__)
 
 
 class CurvatureEstimator(ABC):
-    def __init__(self, model: nn.Module, batch_size: int | None = None, ndim: int = 2, uses_blocks: bool = False):
-        self.model = model
-        self.param_keys = dict(model.named_parameters()).keys()
-        self.params = tuple(model.parameters())
-        self.batch_size = batch_size
+    def __init__(self, ndim: int = 2, uses_blocks: bool = False):
         self.ndim = ndim
         self.uses_blocks = uses_blocks
 
@@ -51,15 +48,6 @@ class CurvatureEstimator(ABC):
 
         return hess.reshape(new_shape)
 
-    def store_data(self, x: torch.Tensor, y: torch.Tensor, loss_fn: Callable):
-        """
-        Stores the necessary data for later use
-        """
-
-        self.x_ = x
-        self.y_ = y
-        self.loss_fn_ = loss_fn
-
     def reset(self):
         """
         Resets the parameters of the curvature estimator.
@@ -68,20 +56,20 @@ class CurvatureEstimator(ABC):
         """
 
     @abstractmethod
-    def scaling_matrix(self) -> Iterable | None:
+    def scaling_matrix(self, objective: ObjectiveFunction, params: Params) -> Iterable | None:
         """
         Obtains the second derivative approximation.
         """
 
     @abstractmethod
-    def hvp(self, step_dir: Iterable[torch.Tensor]) -> Iterable[torch.Tensor]:
+    def hvp(self, objective: ObjectiveFunction, params: Params, step_dir: Params) -> Params:
         """
         Compute B_k p^T
         with B being the scaling matrix and p the step direction
         """
 
     @abstractmethod
-    def quadratic_form(self, step_dir: Iterable[torch.Tensor]) -> torch.Tensor:
+    def quadratic_form(self, objective: ObjectiveFunction, params: Params, step_dir: Params) -> torch.Tensor:
         """
         Compute p B_k p^T
         with B being the scaling matrix and p the step direction

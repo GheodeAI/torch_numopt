@@ -16,9 +16,9 @@ tr_methods = {"cauchy", "dogleg"}
 def create_trust_region_solver(method, curvature_estimator, solver="solve"):
     match method:
         case "cauchy":
-            trust_region_method = CauchyPointTrustRegionSolver(curvature_estimator=curvature_estimator, solver=solver)
+            trust_region_method = CauchyPointTRSolver(curvature_estimator=curvature_estimator, solver=solver)
         case "dogleg":
-            trust_region_method = DoglegTrustRegionSolver(curvature_estimator=curvature_estimator, solver=solver)
+            trust_region_method = DoglegTRSolver(curvature_estimator=curvature_estimator, solver=solver)
         case _:
             tr_methods_str = ", ".join([f"'{i}'" if i is not None else "None" for i in tr_methods])
             last_comma_idx = tr_methods_str.rfind(",")
@@ -33,7 +33,7 @@ class TrustRegionSolver(ABC):
         self.curvature_estimator = curvature_estimator
         self.solver = solver
 
-    def model(self, step_dir, loss, d_p_list):
+    def model(self, objective, step_dir, loss, d_p_list):
         """
         Computes a quadratic approximation of the loss function
         """
@@ -42,21 +42,21 @@ class TrustRegionSolver(ABC):
             return loss
 
         grad_step_dot = param_dot(d_p_list, step_dir)
-        model_value = loss - grad_step_dot + 0.5 * self.curvature_estimator.quadratic_form(step_dir)
+        model_value = loss - grad_step_dot + 0.5 * self.curvature_estimator.quadratic_form(objective, step_dir)
 
         return model_value
 
     @abstractmethod
-    def optimize_model(self, params, radius, d_p_list):
+    def optimize_model(self, objective, params, radius, d_p_list):
         """ """
 
 
-class CauchyPointTrustRegionSolver(TrustRegionSolver):
-    def optimize_model(self, params, radius, d_p_list):
+class CauchyPointTRSolver(TrustRegionSolver):
+    def optimize_model(self, objective, params, radius, d_p_list):
         eps = torch.finfo(d_p_list[0].dtype).eps
 
         d_p_norm = param_norm(d_p_list)
-        g_B_g = self.curvature_estimator.quadratic_form(d_p_list)
+        g_B_g = self.curvature_estimator.quadratic_form(objective, d_p_list)
 
         if g_B_g <= 0:
             tau = 1
@@ -70,13 +70,13 @@ class CauchyPointTrustRegionSolver(TrustRegionSolver):
         return new_params, step_dir
 
 
-class DoglegTrustRegionSolver(TrustRegionSolver):
-    def optimize_model(self, params, radius, d_p_list):
+class DoglegTRSolver(TrustRegionSolver):
+    def optimize_model(self, objective, params, radius, d_p_list):
         eps = torch.finfo(d_p_list[0].dtype).eps
 
-        B_list = self.curvature_estimator.scaling_matrix()
+        B_list = self.curvature_estimator.scaling_matrix(objective)
         d_p_norm = param_dot(d_p_list, d_p_list)
-        g_B_g = self.curvature_estimator.quadratic_form(d_p_list)
+        g_B_g = self.curvature_estimator.quadratic_form(objective, d_p_list)
 
         grad_scale = d_p_norm / (g_B_g + eps)
         psd = param_scalar_prod(grad_scale, d_p_list)
@@ -87,7 +87,8 @@ class DoglegTrustRegionSolver(TrustRegionSolver):
             new_params = param_sub(params, step_dir)
             return new_params, step_dir
 
-        pgn = solve_system(self.curvature_estimator, d_p_list, solver=self.solver)
+        pgn = solve_system(self.curvature_estimator, objective, d_p_list, solver=self.solver)
+
 
         norm_pgn = param_norm(pgn)
         if norm_pgn <= radius:

@@ -3,6 +3,7 @@ import torch.nn as nn
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
 from ..curvature import GaussNewtonBlockApproximation
+from ..utils import Params
 
 
 class GaussNewton(NumericalOptimizer):
@@ -36,15 +37,15 @@ class GaussNewton(NumericalOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         solver: str = "solve",
         batch_size: int | None = None,
     ):
         super().__init__(
-            model,
-            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=None),
+            params,
+            curvature_estimator=GaussNewtonBlockApproximation(),
             lr_init=lr_init,
             lr_method=lr_method,
             solver=solver,
@@ -82,7 +83,7 @@ class GaussNewtonLS(LineSearchOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         c1: float = 1e-4,
@@ -96,8 +97,8 @@ class GaussNewtonLS(LineSearchOptimizer):
         batch_size: int | None = None,
     ):
         super().__init__(
-            model,
-            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=None),
+            params,
+            curvature_estimator=GaussNewtonBlockApproximation(),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(

@@ -5,7 +5,7 @@ import torch.nn as nn
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
 from ..curvature import NaiveIdentityCalculator
-from ..utils import param_reshape_like
+from ..utils import param_reshape_like, Params
 
 class ConjugateGradientMixin:
     def __init__(
@@ -84,14 +84,14 @@ class ConjugateGradient(ConjugateGradientMixin, NumericalOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         cg_method: str = "PRP+",
     ):
         super().__init__(
-            model,
-            curvature_estimator=NaiveIdentityCalculator(model=model),
+            params,
+            curvature_estimator=NaiveIdentityCalculator(),
             lr_init=lr_init,
             lr_method=lr_method,
             cg_method=cg_method
@@ -129,7 +129,7 @@ class ConjugateGradientLS(ConjugateGradientMixin, LineSearchOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: nn.Module,
         lr_init: float = 1,
         lr_method: str = None,
         c1: float = 1e-4,
@@ -142,8 +142,8 @@ class ConjugateGradientLS(ConjugateGradientMixin, LineSearchOptimizer):
         cg_method: str = "PRP+",
     ):
         super().__init__(
-            model,
-            curvature_estimator=NaiveIdentityCalculator(model=model),
+            params,
+            curvature_estimator=NaiveIdentityCalculator(),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(

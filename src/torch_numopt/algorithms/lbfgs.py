@@ -17,7 +17,7 @@ from ..utils import (
     param_copy
 )
 
-class LBGFSMixin:
+class LBFGSMixin:
     def __init__(self, *args, memory_size: int = 10, **kwargs):
         super().__init__(*args, **kwargs)
         self.s = []
@@ -71,7 +71,7 @@ class LBGFSMixin:
         return params
 
 
-class LBGFS(LBGFSMixin, NumericalOptimizer):
+class LBFGS(LBFGSMixin, NumericalOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
 
@@ -123,7 +123,7 @@ class LBGFS(LBGFSMixin, NumericalOptimizer):
             memory_size=memory_size
         )
     
-class LBGFSLS(LBGFSMixin, LineSearchOptimizer):
+class LBFGSLS(LBFGSMixin, LineSearchOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
     TODO: configure line search factories

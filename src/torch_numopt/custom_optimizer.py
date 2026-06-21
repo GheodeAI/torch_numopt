@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 import torch
 import torch.nn as nn
 from torch.optim.optimizer import Optimizer
+from .objective import ObjectiveFunction
 
 
 class CustomOptimizer(Optimizer, ABC):
@@ -16,10 +17,7 @@ class CustomOptimizer(Optimizer, ABC):
     @abstractmethod
     def step(
         self,
-        x: torch.Tensor,
-        y: torch.Tensor,
-        loss_fn: nn.Module,
-        closure: Callable | None = None,
+        objective: ObjectiveFunction
     ) -> Iterable:
         """
         Method to update the parameters of the Neural Network.
@@ -27,14 +25,6 @@ class CustomOptimizer(Optimizer, ABC):
         Parameters
         ----------
 
-        x: torch.Tensor
-            Inputs of the Neural Network.
-        y: torch.Tensor
-            Targets of the Neural Network.
-        loss_fn: nn.Module
-            Loss function to be optimized.
-        closure: Callable
-            Kept for compatibility, unused.
         """
 
     def update(self, loss: float):

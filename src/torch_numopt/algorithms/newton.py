@@ -4,6 +4,7 @@ from ..line_search import create_line_search_solver
 from ..trust_region import create_trust_region_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
 from ..curvature import ExactBlockHessianCalculator
+from ..utils import Params
 
 
 class Newton(NumericalOptimizer):
@@ -45,17 +46,16 @@ class Newton(NumericalOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         damping: str = None,
         mu: float = 1,
         solver: str = "solve",
-        batch_size: int | None = None,
     ):
         super().__init__(
-            model,
-            curvature_estimator=ExactBlockHessianCalculator(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            params,
+            curvature_estimator=ExactBlockHessianCalculator(damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             solver=solver,
@@ -101,7 +101,7 @@ class NewtonLS(LineSearchOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: nn.Module,
         lr_init: float = 1,
         lr_method: str | None = None,
         c1: float = 1e-4,
@@ -114,11 +114,10 @@ class NewtonLS(LineSearchOptimizer):
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         solver: str = "solve",
-        batch_size: int | None = None,
     ):
         super().__init__(
-            model,
-            curvature_estimator=ExactBlockHessianCalculator(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            params,
+            curvature_estimator=ExactBlockHessianCalculator(damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(

@@ -1,9 +1,11 @@
 from __future__ import annotations
 import torch
 import torch.nn as nn
+
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
 from ..curvature import GaussNewtonBlockApproximation
+from ..utils import Params, param_add, param_scaled_add, param_dot, param_scalar_prod
 
 
 class LevenbergMarquardt(NumericalOptimizer):
@@ -46,11 +48,11 @@ class LevenbergMarquardt(NumericalOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         mu: float = 0.001,
-        mu_dec: float = 0.1,
+        mu_dec: float = 0.01,
         mu_max: float = 1e10,
         fletcher: bool = False,
         solver: str = "solve",
@@ -60,8 +62,8 @@ class LevenbergMarquardt(NumericalOptimizer):
         damping = "fletcher" if fletcher else "identity"
 
         super().__init__(
-            model,
-            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            params,
+            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             solver=solver,
@@ -72,32 +74,34 @@ class LevenbergMarquardt(NumericalOptimizer):
         self.mu_max = mu_max
         self.prev_loss = None
 
-    def step(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
-        super().step(x, y, loss_fn)
+    def step(self, objective):
+        super().step(objective)
+        self.update(objective)
 
-        with torch.inference_mode():
-            pred_y = self.model(x)
-            loss = loss_fn(pred_y, y)
-            self.update(loss)
-
-    def update(self, loss: torch.Tensor):
-        loss_val = loss.detach().item()
-
+    def update(self, objective):
         if self.prev_loss is None:
-            self.prev_loss = loss_val
-            self._prev_params = [p.detach().clone() for p in self.params]
-        elif loss_val <= self.prev_loss:
-            self.prev_loss = loss_val
-            self._prev_params = [p.detach().clone() for p in self.params]
+            super().update(objective)
+            return
+
+        pred_step = param_scalar_prod(-self.curr_lr, self.curr_step_dir)
+        pred_reduction = - (0.5 * self.curr_lr - 1) * param_dot(pred_step, self.prev_grad)
+
+        rho = (self.prev_loss - self.curr_loss) / pred_reduction
+
+        if rho > 0:
             self.mu *= self.mu_dec
+            super().update(objective)
         else:
-            self._params = self._prev_params
+            with torch.no_grad():
+                for p, prev_p in zip(self.curr_params, self.prev_params):
+                    p.copy_(prev_p)
             self.mu /= self.mu_dec
 
         if self.mu >= self.mu_max:
             self.mu = self.mu_max
 
         self.curvature_estimator.mu = self.mu
+
 
 
 class LevenbergMarquardtLS(LineSearchOptimizer):
@@ -140,7 +144,7 @@ class LevenbergMarquardtLS(LineSearchOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         mu: float = 0.001,
@@ -161,8 +165,8 @@ class LevenbergMarquardtLS(LineSearchOptimizer):
         damping = "fletcher" if fletcher else "identity"
 
         super().__init__(
-            model,
-            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            params,
+            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
@@ -176,13 +180,9 @@ class LevenbergMarquardtLS(LineSearchOptimizer):
         self.mu_max = mu_max
         self.prev_loss = None
 
-    def step(self, x: torch.Tensor, y: torch.Tensor, loss_fn: nn.Module):
-        super().step(x, y, loss_fn)
-
-        with torch.inference_mode():
-            pred_y = self.model(x)
-            loss = loss_fn(pred_y, y)
-            self.update(loss)
+    def step(self, objective):
+        super().step(objective)
+        self.update(objective.loss(self.params))
 
     def update(self, loss: torch.Tensor):
         loss_val = loss.detach().item()
@@ -244,7 +244,7 @@ class LevenbergMarquardtTR(TrustRegionOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         mu: float = 0.001,
@@ -263,8 +263,8 @@ class LevenbergMarquardtTR(TrustRegionOptimizer):
         damping = "fletcher" if fletcher else "identity"
 
         super().__init__(
-            model,
-            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=damping, mu=mu),
+            params,
+            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau),

@@ -1,9 +1,12 @@
 from __future__ import annotations
+from typing import Iterable
+import torch
 import torch.nn as nn
 from ..line_search import create_line_search_solver
 from ..trust_region import create_trust_region_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
 from ..curvature import NaiveIdentityCalculator
+from ..utils import Params
 
 
 class GradientDescent(NumericalOptimizer):
@@ -31,14 +34,14 @@ class GradientDescent(NumericalOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Iterable[torch.Tensor],
         lr_init: float = 1,
         lr_method: str = None,
     ):
 
         super().__init__(
-            model,
-            curvature_estimator=NaiveIdentityCalculator(model=model),
+            params=params,
+            curvature_estimator=NaiveIdentityCalculator(),
             lr_init=lr_init,
             lr_method=lr_method,
         )
@@ -69,7 +72,7 @@ class GradientDescentLS(LineSearchOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str = None,
         c1: float = 1e-4,
@@ -82,8 +85,8 @@ class GradientDescentLS(LineSearchOptimizer):
     ):
 
         super().__init__(
-            model,
-            curvature_estimator=NaiveIdentityCalculator(model=model),
+            params=params,
+            curvature_estimator=NaiveIdentityCalculator(),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
@@ -117,13 +120,13 @@ class GradientDescentTR(TrustRegionOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         radius_init: float = 1.0,
         trust_region_method: str = "cauchy",
     ):
-        curvature_estimator = NaiveIdentityCalculator(model=model)
+        curvature_estimator = NaiveIdentityCalculator()
         super().__init__(
-            model,
+            params,
             curvature_estimator=curvature_estimator,
             trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=curvature_estimator),
             radius_init=radius_init,
