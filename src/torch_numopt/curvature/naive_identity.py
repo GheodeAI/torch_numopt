@@ -14,7 +14,7 @@ class NaiveIdentityCalculator(CurvatureEstimator):
         super().__init__(ndim=0, uses_blocks=False)
 
     def scaling_matrix(self, objective, params) -> float:
-        return 1
+        return torch.tensor(1, device=params[0].device, dtype=params[0].dtype)
 
     def hvp(self, objective, params, step_dir) -> Iterable[torch.Tensor]:
         return step_dir

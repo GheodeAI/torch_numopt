@@ -10,30 +10,17 @@ from ..utils import param_dot, param_scalar_prod, param_add, Params
 logger = logging.getLogger(__name__)
 
 
-class GaussNewtonApproximation(CurvatureEstimator):
+class GaussNewtonBlockApproximation(CurvatureEstimator):
     def __init__(
         self,
         vectorize: bool = True,
         damping: Optional[str] = None,
         mu: float = 1e-4,
     ):
-        super().__init__(ndim=2, uses_blocks=False)
+        super().__init__(ndim=2, uses_blocks=True)
         self.vectorize = vectorize
         self.damping = damping
         self.mu = mu
-
-    def _construct_gauss_newton_matrix(self, j_params: Params, params) -> torch.Tensor:
-        n_groups = len(j_params)
-        row_blocks = []
-        for i in range(n_groups):
-            col_blocks = []
-            Ji = j_params[i].view(j_params[i].shape[0], -1)
-            for j in range(n_groups):
-                Jj = j_params[j].view(j_params[j].shape[0], -1)
-                col_blocks.append(Ji.T @ Jj)
-            row_blocks.append(torch.cat(col_blocks, dim=1))
-        full_hessian = torch.cat(row_blocks, dim=0)
-        return full_hessian
 
     def scaling_matrix(self, objective: ObjectiveFunction, params: Params) -> Params:
         r"""
@@ -70,7 +57,10 @@ class GaussNewtonApproximation(CurvatureEstimator):
             logger.info("Computing the Gauss-Newton approximate Hessian matrix.")
 
             j_params = torch.autograd.functional.jacobian(objective.residual, params, create_graph=False, vectorize=self.vectorize)
-            h_params = self._construct_gauss_newton_matrix(j_params, params)
+            h_params = [None] * len(j_params)
+            for idx, j in enumerate(j_params):
+                j = j.view(j.shape[0], -1)
+                h_params[idx] = self._reshape_hessian(j.T @ j)
         else:
             # Calculate hessian for each batch and add the results
             logger.info(
@@ -82,31 +72,36 @@ class GaussNewtonApproximation(CurvatureEstimator):
                 # Calculate approximate hessian of the batch
                 get_residuals = partial(objective.residual, batch_idx=i)
                 j_params_batch = torch.autograd.functional.jacobian(get_residuals, params, create_graph=False, vectorize=self.vectorize)
-                h_param_batch = self._construct_gauss_newton_matrix(j_params_batch, params)
+                h_list_batch = [None] * len(j_params_batch)
+                for idx, j in enumerate(j_params_batch):
+                    j = j.view(j.shape[0], -1)
+                    h_list_batch[idx] = self._reshape_hessian(j.T @ j)
 
                 # Aggregate result
                 if h_params is None:
-                    h_params = h_param_batch
+                    h_params = h_list_batch
                 else:
-                    h_params = h_params + h_param_batch
+                    h_params = param_add(h_params, h_list_batch)
 
                 logger.info("Computed batch %d for the approximate hessian...", i)
 
         if objective.reduction == "mean":
-            h_params = 2 * h_params / objective.data_size 
+            h_params = list(param_scalar_prod(2 / objective.data_size, h_params))
+        else:
+            h_params = list(h_params)
 
         # Damp matrix
         if self.damping is not None:
-            logger.info("Applying damping to the exact hessian...")
+            logger.info("Applying damping to the approximate hessian...")
+            for i, h in enumerate(h_params):
+                if self.damping == "identity":
+                    h_params[i] = h + self.mu * torch.eye(h.shape[0], device=h.device)
+                elif self.damping == "fletcher":
+                    h_params[i] = h + self.mu * torch.diag(h.diagonal())
+                else:
+                    raise ValueError("Invalid damping strategy.")
 
-        if self.damping == "identity":
-            h_params = h_params + self.mu * torch.eye(h_params.shape[0], device=h_params.device)
-        elif self.damping == "fletcher":
-            h_params = h_params + self.mu * torch.diag(h_params.diagonal())
-        elif self.damping is not None:
-            raise ValueError(f"Invalid damping strategy {self.damping}.")
-
-        return h_params
+        return tuple(h_params)
 
     def _jvp(self, objective, params, step_dir):
         if not objective.batched:
@@ -156,7 +151,8 @@ class GaussNewtonApproximation(CurvatureEstimator):
 
                 logger.info("Computed batch %d for the Gauss-Newton hvp...", i)
 
-        hess_approx = param_scalar_prod(2/objective.data_size, hess_approx)
+        if objective.reduction == "mean":
+            hess_approx = param_scalar_prod(2 / objective.data_size, hess_approx)
 
         # Damp vector
         if self.damping is not None:
@@ -172,7 +168,7 @@ class GaussNewtonApproximation(CurvatureEstimator):
 
     def quadratic_form(self, objective, params, d_p_list: Params) -> Params:
         Jp = self._jvp(objective, params, d_p_list)
-        quadratic_form = param_dot(Jp, Jp) * 2 / objective.data_size
+        quadratic_form = param_dot(Jp, Jp) * (2 / objective.data_size)
 
         # Damp vector
         if self.damping is not None:

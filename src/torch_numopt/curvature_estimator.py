@@ -7,7 +7,7 @@ import logging
 import torch
 from functools import reduce
 from .objective import ObjectiveFunction
-from .utils import Params
+from .utils import Params, param_numel, param_flatten, param_sizes
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +55,32 @@ class CurvatureEstimator(ABC):
         Used primarily for quasi-newton methods with memory.
         """
 
+    def full_scaling_matrix(self, objective: ObjectiveFunction, params: Params) -> torch.Tensor:
+        """
+        Obtains the second derivative approximation in matrix form as a single Tensor.
+        """
+
+        n_params = param_numel(params)
+        B = self.scaling_matrix(objective, params)
+        if self.ndim == 0:
+            full_B = torch.zeros((n_params, n_params), device=B.device, dtype=B.dtype)
+            full_B.fill_diagonal_(B)
+        if self.ndim == 1:
+            if self.uses_blocks:
+                B = param_flatten(B)
+            full_B = torch.zeros((n_params, n_params), device=B.device, dtype=B.dtype)
+            full_B.diagonal().copy_(B)
+        elif self.ndim == 2:
+            if self.uses_blocks:
+                full_B = torch.block_diag(*B)
+            else:
+                full_B = B
+        return full_B
+
+        # return self.scaling_matrix(objective=objective, params=params)
+
     @abstractmethod
-    def scaling_matrix(self, objective: ObjectiveFunction, params: Params) -> Iterable | None:
+    def scaling_matrix(self, objective: ObjectiveFunction, params: Params) -> Iterable | torch.Tensor:
         """
         Obtains the second derivative approximation.
         """

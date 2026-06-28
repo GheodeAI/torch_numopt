@@ -2,13 +2,24 @@ import logging
 import torch
 from .curvature_estimator import CurvatureEstimator
 from .objective import ObjectiveFunction
-from .utils import fix_cond, pinv_svd_trunc, param_dot, param_add, param_scalar_prod, param_sub, param_norm, param_flatten, param_reshape_like
+from .utils import (
+    fix_cond,
+    pinv_svd_trunc,
+    param_dot,
+    param_scaled_add,
+    param_diff,
+    param_norm,
+    param_flatten,
+    param_reshape_like,
+    param_zero_like,
+)
 
 logger = logging.getLogger(__name__)
 
 direct_solver_set = {"pinv", "pinv-trunc", "solve", "lsqrs", "safe-lsqrs", "cholesky"}
 iterative_solver_set = {"cg", "cg-trunc", "cr"}
 solver_set = direct_solver_set.union(iterative_solver_set).union({None})
+
 
 def solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs_params: tuple, solver: str = None, **kwargs) -> tuple:
     # Attempt regular solve
@@ -18,7 +29,7 @@ def solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFu
     except torch.linalg.LinAlgError as e:
         success = False
         logger.warning(f"Linear algebra error. {e}")
-    
+
     if success:
         return result
 
@@ -33,10 +44,11 @@ def solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFu
 
     if success:
         return result
-    
+
     # Fallback to not solving
     logger.error("Cannot solve linear system. Fallback to returning the gradient.")
     return rhs_params
+
 
 def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs_params: tuple, solver: str = None, **kwargs) -> tuple:
     eps = torch.finfo(rhs_params[0].dtype).eps
@@ -72,7 +84,7 @@ def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveF
                             L = torch.linalg.cholesky(B)
                             p = torch.cholesky_solve(rhs.ravel()[:, None], L).reshape(rhs.shape)
                         case "safe-lsqrs":
-                            p, *_ = torch.linalg.lstsq(B, rhs.ravel(), driver='gels')
+                            p, *_ = torch.linalg.lstsq(B, rhs.ravel(), driver="gels")
                             p = p.reshape(rhs.shape)
                     solution_params[i] = p
             else:
@@ -97,8 +109,11 @@ def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveF
                         p = p.reshape(rhs.shape)
                     case "cholesky":
                         L = torch.linalg.cholesky(B)
-                        p = torch.linalg.cholesky_solve(rhs.ravel(), L).reshape(rhs.shape)
-                solution_params[i] = param_reshape_like(p, rhs_params)
+                        p = torch.cholesky_solve(rhs.ravel()[:, None], L).reshape(rhs.shape)
+                    case "safe-lsqrs":
+                        p, *_ = torch.linalg.lstsq(B, rhs.ravel(), driver="gels")
+                        p = p.reshape(rhs.shape)
+                solution_params = param_reshape_like(p, rhs_params)
 
         elif solver in iterative_solver_set:
             match solver:
@@ -122,22 +137,16 @@ def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveF
     else:
         raise ValueError("Incorrectly dimensioned hessian.")
 
-    # p_norm = param_norm(solution_params)           # norm of the Newton step
-    # g_norm = param_norm(rhs_params)    # norm of the gradient
-
-    # print(f"|g| = {g_norm:.6e}, |p| = {p_norm:.6e}")
-
     return tuple(solution_params)
 
 
 def conjugate_gradient(curvature_estimator, objective, rhs, max_iter=100, atol=1e-8, tol=1e-4, min_iter=2):
     eps = torch.finfo(rhs[0].dtype).eps
-    params = objective.params
 
     def damped_hvp(p):
-        return param_add(curvature_estimator.hvp(objective, params, p), param_scalar_prod(eps, p))
+        return param_scaled_add(curvature_estimator.hvp(objective, objective.params, p), p, scale=eps)
 
-    params = tuple(torch.zeros_like(r) for r in rhs)
+    new_params = param_zero_like(rhs)
     res = rhs
     p_dir = res
     rsold = param_dot(res, res)
@@ -148,22 +157,23 @@ def conjugate_gradient(curvature_estimator, objective, rhs, max_iter=100, atol=1
         Ap = damped_hvp(p_dir)
         pAp = param_dot(p_dir, Ap)
         alpha = rsold / (pAp + eps)
-        params = param_add(params, param_scalar_prod(alpha, p_dir))
-        res = param_sub(res, param_scalar_prod(alpha, Ap))
+        new_params = param_scaled_add(new_params, p_dir, scale=alpha)
+        res = param_scaled_add(res, Ap, scale=-alpha)
         rsnew = param_dot(res, res)
         if torch.sqrt(rsnew) < effective_tol and i >= min_iter:
             break
 
-        p_dir = param_add(res, param_scalar_prod(rsnew / rsold, p_dir))
+        p_dir = param_scaled_add(res, p_dir, scale=rsnew / rsold)
         rsold = rsnew
 
-    return params
+    return new_params
+
 
 def truncated_cg(curvature_estimator, objective, rhs, max_iter=100, atol=1e-8, tol=1e-4, min_iter=2):
     eps = torch.finfo(rhs[0].dtype).eps
     params = objective.params
 
-    params = tuple(torch.zeros_like(r) for r in rhs)
+    new_params = param_zero_like(rhs)
     res = rhs
     p_dir = res
     rsold = param_dot(res, res)
@@ -175,27 +185,28 @@ def truncated_cg(curvature_estimator, objective, rhs, max_iter=100, atol=1e-8, t
         pAp = param_dot(p_dir, Ap)
         if pAp <= 0:
             if i == 0:
-                params = rhs
+                new_params = rhs
             break
 
         alpha = rsold / (pAp + eps)
-        params = param_add(params, param_scalar_prod(alpha, p_dir))
-        res = param_sub(res, param_scalar_prod(alpha, Ap))
+        new_params = param_scaled_add(new_params, p_dir, scale=alpha)
+        res = param_scaled_add(res, Ap, scale=-alpha)
         rsnew = param_dot(res, res)
         if torch.sqrt(rsnew) < effective_tol and i >= min_iter:
             break
 
-        p_dir = param_add(res, param_scalar_prod(rsnew / rsold, p_dir))
+        p_dir = param_scaled_add(res, p_dir, scale=rsnew / rsold)
         rsold = rsnew
 
-    return params
+    return new_params
+
 
 def conjugate_residual(curvature_estimator, objective, rhs, max_iter=100, atol=1e-8, tol=1e-4, min_iter=2):
     eps = torch.finfo(rhs[0].dtype).eps
     params = objective.params
 
-    next_params = tuple(torch.zeros_like(r) for r in rhs)
-    res = param_sub(rhs, curvature_estimator.hvp(objective, params, next_params))
+    next_params = param_zero_like(rhs)
+    res = param_diff(rhs, curvature_estimator.hvp(objective, params, next_params))
     p_dir = res
     Ap = curvature_estimator.hvp(objective, params, p_dir)
     Ares = curvature_estimator.hvp(objective, params, res)
@@ -205,15 +216,15 @@ def conjugate_residual(curvature_estimator, objective, rhs, max_iter=100, atol=1
     for i in range(max_iter):
         resAres = param_dot(res, Ares)
         alpha = resAres / (param_dot(Ap, Ap) + eps)
-        next_params = param_add(next_params, param_scalar_prod(alpha, p_dir))
-        res = param_sub(res, param_scalar_prod(alpha, Ap))
+        next_params = param_scaled_add(next_params, p_dir, scale=alpha)
+        res = param_scaled_add(res, Ap, scale=-alpha)
 
         if param_norm(res) < effective_tol and i >= min_iter:
             break
 
         Ares = curvature_estimator.hvp(objective, params, res)
         beta = param_dot(res, Ares) / (resAres + eps)
-        p_dir = param_add(res, param_scalar_prod(beta, p_dir))
-        Ap = param_add(Ares, param_scalar_prod(beta, Ap))
+        p_dir = param_scaled_add(res, p_dir, scale=beta)
+        Ap = param_scaled_add(Ares, Ap, scale=beta)
 
     return next_params

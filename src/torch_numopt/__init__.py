@@ -1,10 +1,9 @@
 """ """
 
 from .objective import ObjectiveFunction, SupervisedLearningObjective
-from .custom_optimizer import CustomOptimizer
 from .curvature_estimator import CurvatureEstimator
-from .line_search import LineSearchSolver, BacktrackingLineSearch, InterpolationLineSearch, BisectionLineSearch
-from .trust_region import TrustRegionSolver, CauchyPointTRSolver, DoglegTRSolver
+from .line_search import LineSearchSolver, BacktrackingLineSearch, InterpolationLineSearch, BisectionLineSearch, create_line_search_solver
+from .trust_region import TrustRegionSolver, CauchyPointTRSolver, DoglegTRSolver, create_trust_region_solver
 from .numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
 
 from . import curvature
@@ -13,12 +12,10 @@ from .curvature import *
 from . import algorithms
 from .algorithms import *
 
-from . import utils 
+from . import utils
 from .utils import *
 
-
 __all__ = [
-    "CustomOptimizer",
     "CurvatureEstimator",
     "NumericalOptimizer",
     "LineSearchOptimizer",
@@ -30,7 +27,9 @@ __all__ = [
     "BacktrackingLineSearch",
     "InterpolationLineSearch",
     "BisectionLineSearch",
+    "create_line_search_solver",
+    "create_trust_region_solver",
     *algorithms.__all__,
     *curvature.__all__,
-    *utils.__all__
+    *utils.__all__,
 ]

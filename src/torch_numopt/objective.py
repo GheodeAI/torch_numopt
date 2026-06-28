@@ -1,10 +1,10 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Iterable
 import math
 import torch
 from torch.func import functional_call
 from .utils import param_dot, Params
+
 
 class ObjectiveFunction(ABC):
     """Objective function abstract class"""
@@ -66,6 +66,7 @@ class ObjectiveFunction(ABC):
 
         raise NotImplementedError("Residual calculation is not implemented.")
 
+
 class SupervisedLearningObjective(ObjectiveFunction):
     def __init__(self, model, loss_fn, optimizer, weight_decay=0, batch_size=None):
         super().__init__(params=model.parameters(), optimizer=optimizer, batched=batch_size is not None)
@@ -76,9 +77,12 @@ class SupervisedLearningObjective(ObjectiveFunction):
         self.batch_size = batch_size
         self.X = None
         self.y = None
+        self.data_size = 1
         self.n_batches = None
-        self.scale = 1
-    
+        self.reduction = None
+        if hasattr(loss_fn, "reduction"):
+            self.reduction = loss_fn.reduction
+
     def set_data(self, x, y):
         self.X = x
         self.y = y
@@ -86,8 +90,15 @@ class SupervisedLearningObjective(ObjectiveFunction):
             self.n_batches = 1
         else:
             self.n_batches = math.ceil(len(x) / self.batch_size)
-        self.scale = 1/len(x)
-    
+        self.data_size = x.shape[0]
+
+    def batch_data_size(self, batch_idx):
+        if batch_idx < self.batch_size - 1:
+            return self.batch_size
+        else:
+            last_batch_size = self.data_size % self.batch_size
+            return last_batch_size
+
     def get_batch(self, batch_idx: int = None):
         if batch_idx is None:
             X = self.X
@@ -95,9 +106,9 @@ class SupervisedLearningObjective(ObjectiveFunction):
         else:
             batch_start = batch_idx * self.batch_size
             batch_end = (batch_idx + 1) * self.batch_size
-            X = self.X[batch_start : batch_end]
-            y = self.y[batch_start : batch_end]
-        
+            X = self.X[batch_start:batch_end]
+            y = self.y[batch_start:batch_end]
+
         return X, y
 
     def loss(self, *params: Params, batch_idx: int = None) -> torch.Tensor:
@@ -107,7 +118,7 @@ class SupervisedLearningObjective(ObjectiveFunction):
         loss = self.loss_fn(out, y)
         if self.weight_decay > 0:
             loss += self.weight_decay * param_dot(params, params)
-        
+
         return loss
 
     def residual(self, *params: Params, batch_idx: int = None) -> torch.Tensor:

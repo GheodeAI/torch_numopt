@@ -1,21 +1,12 @@
-
 from __future__ import annotations
-from typing import Callable
 import torch
 import torch.nn as nn
-from collections import deque
 from ..line_search import create_line_search_solver
-from ..trust_region import create_trust_region_solver
-from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
+from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
 from ..curvature import NaiveIdentityCalculator
-from ..utils import (
-    param_add,
-    param_neg,
-    param_sub,
-    param_dot,
-    param_scalar_prod,
-    param_copy
-)
+from ..utils import param_add, param_diff, param_dot, param_scalar_prod, param_copy, param_neg, Params
+from ..objective import ObjectiveFunction
+
 
 class LBFGSMixin:
     def __init__(self, *args, memory_size: int = 10, **kwargs):
@@ -25,45 +16,44 @@ class LBFGSMixin:
         self.gamma = 1
         self.memory_size = memory_size
 
-    def get_step_direction(self, params: tuple, d_p_list: tuple):
-        if self.prev_params_ is None:
-            return d_p_list
-        
-        # q = param_neg(d_p_list)
-        q = d_p_list
+    def get_step_direction(self, objective: Params, grad_params: tuple):
+        if self.prev_params is None:
+            return param_neg(grad_params)
+
+        eps = torch.finfo(grad_params[0].dtype).eps
+        q = grad_params
         alphas = []
         for s, y in zip(reversed(self.s), reversed(self.y)):
-            alpha = param_dot(s, q) / param_dot(s, y)
-            q = param_sub(q, param_scalar_prod(alpha, y))
+            alpha = param_dot(s, q) / (param_dot(s, y) + eps)
+            q = param_diff(q, param_scalar_prod(alpha, y))
             alphas.append(alpha)
-        
+
         r = param_scalar_prod(self.gamma, q)
         for s, y, alpha in zip(self.s, self.y, reversed(alphas)):
-            beta = param_dot(y, r) / param_dot(s, y)
+            beta = param_dot(y, r) / (param_dot(s, y) + eps)
             r = param_add(r, param_scalar_prod(alpha - beta, s))
 
         if len(self.s) > 0:
-            self.gamma = param_dot(self.s[-1], self.y[-1])/param_dot(self.y[-1], self.y[-1])
+            self.gamma = param_dot(self.s[-1], self.y[-1]) / (param_dot(self.y[-1], self.y[-1]) + eps)
 
-        return r
-    
-    def apply_gradients(self, eval_model: Callable, params: list, d_p_list: list):
+        return param_neg(r)
+
+    def apply_gradients(self, objective: ObjectiveFunction, params: list, grad_params: list):
         old_params = param_copy(params)
 
-        super().apply_gradients(eval_model, params, d_p_list)
+        super().apply_gradients(objective, params, grad_params)
 
         with torch.enable_grad():
-            new_loss = eval_model(*params)
+            new_loss = objective.loss(*params)
             new_grad = torch.autograd.grad(new_loss, params, create_graph=False, retain_graph=False)
-        
-        new_s = param_sub(params, old_params)
-        new_y = param_sub(new_grad, d_p_list)
+
+        new_s = param_diff(params, old_params)
+        new_y = param_diff(new_grad, grad_params)
 
         if param_dot(new_s, new_y) > 1e-12:
             self.s.append(new_s)
             self.y.append(new_y)
-            
-        
+
         if len(self.s) > self.memory_size:
             self.s.pop(0)
             self.y.pop(0)
@@ -110,19 +100,14 @@ class LBFGS(LBFGSMixin, NumericalOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
-        lr_init: float = 1,
+        params: Params,
+        lr_init: float = 1.0,
         lr_method: str | None = None,
         memory_size: int = 10,
     ):
-        super().__init__(
-            model,
-            curvature_estimator=NaiveIdentityCalculator(model=model),
-            lr_init=lr_init,
-            lr_method=lr_method,
-            memory_size=memory_size
-        )
-    
+        super().__init__(params, curvature_estimator=NaiveIdentityCalculator(), lr_init=lr_init, lr_method=lr_method, memory_size=memory_size)
+
+
 class LBFGSLS(LBFGSMixin, LineSearchOptimizer):
     """
     Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
@@ -184,6 +169,5 @@ class LBFGSLS(LBFGSMixin, LineSearchOptimizer):
             line_search=create_line_search_solver(
                 method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
             ),
-            memory_size = memory_size
+            memory_size=memory_size,
         )
-    

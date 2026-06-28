@@ -1,13 +1,7 @@
 import torch_numopt
 
-def train_loop(
-    model,
-    loss_fn,
-    opt,
-    data_loader,
-    epochs=100,
-    max_patience=50
-):
+
+def train_loop(model, loss_fn, opt, data_loader, epochs=100, max_patience=50):
     all_loss = {}
     patience = 0
     for epoch in range(epochs):
@@ -30,12 +24,12 @@ def train_loop(
         print("epoch: ", epoch, end="")
         print(", loss: {}".format(all_loss[epoch + 1].cpu().detach().numpy().item()))
 
-        if epoch > 0 and all_loss[epoch] <= all_loss[epoch+1]:
+        if epoch > 0 and all_loss[epoch] <= all_loss[epoch + 1]:
             patience -= 1
         else:
             patience = max_patience
 
         if patience <= 0:
             break
-    
+
     return model, all_loss

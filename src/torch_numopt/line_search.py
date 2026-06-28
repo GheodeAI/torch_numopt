@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import logging
 import torch
 from .objective import ObjectiveFunction
-from .utils import param_add, param_scaled_add, param_dot, param_scalar_prod, param_is_finite, Params
+from .utils import param_scaled_add, param_dot, param_is_finite, param_neg, Params
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class LineSearchSolver(ABC):
         lr: float,
         loss: torch.Tensor,
         new_loss: torch.Tensor,
-        grad: Params,
+        grad_params: Params,
     ):
         """
         Compute one of the stopping conditions for line search methods.
@@ -85,7 +85,7 @@ class LineSearchSolver(ABC):
         elif not torch.isfinite(loss).all():
             return True
 
-        dir_deriv = param_dot(grad, step_dir)
+        dir_deriv = param_dot(grad_params, step_dir)
         if not torch.isfinite(dir_deriv).all():
             return False
 
@@ -126,8 +126,8 @@ class LineSearchSolver(ABC):
 
         return accepted
 
-    def __call__(self, params, step_dir, grad, lr_init, objective):
-        return self.line_search(params, step_dir, grad, lr_init, objective)
+    def __call__(self, params, step_dir, grad_params, lr_init, objective):
+        return self.line_search(params, step_dir, grad_params, lr_init, objective)
 
     @abstractmethod
     @torch.enable_grad()
@@ -135,7 +135,7 @@ class LineSearchSolver(ABC):
         self,
         params: Params,
         step_dir: Params,
-        grad: Params,
+        grad_params: Params,
         lr_init: float,
         objective: ObjectiveFunction,
     ):
@@ -148,7 +148,7 @@ class BacktrackingLineSearch(LineSearchSolver):
         self,
         params: Params,
         step_dir: Params,
-        grad: Params,
+        grad_params: Params,
         lr_init: float,
         objective: ObjectiveFunction,
     ):
@@ -173,17 +173,17 @@ class BacktrackingLineSearch(LineSearchSolver):
 
         loss = objective.loss(*params)
 
-        new_params = param_scaled_add(params, step_dir, -lr)
+        new_params = param_scaled_add(params, step_dir, lr)
         new_loss = objective.loss(*new_params)
 
         logger.info("Starting backtracking line search with initial guess of %g with loss of %g.", lr, new_loss)
 
         n_iters = 0
-        while n_iters < self.max_iter and not self.accept_step(params, new_params, step_dir, lr, loss, new_loss, grad) and lr >= self.tol:
+        while n_iters < self.max_iter and not self.accept_step(params, new_params, step_dir, lr, loss, new_loss, grad_params) and lr >= self.tol:
             lr *= self.tau
 
             # Evaluate model with new lr
-            new_params = param_scaled_add(params, step_dir, -lr)
+            new_params = param_scaled_add(params, step_dir, lr)
             new_loss = objective.loss(*new_params)
 
             logger.debug("Iteration %d, new guess is %g which yielded a loss of %g.", n_iters, lr, new_loss)
@@ -207,7 +207,7 @@ class InterpolationLineSearch(LineSearchSolver):
         self,
         params: Params,
         step_dir: Params,
-        grad: Params,
+        grad_params: Params,
         lr_init: float,
         objective: ObjectiveFunction,
     ):
@@ -223,7 +223,7 @@ class InterpolationLineSearch(LineSearchSolver):
         eval_model: Callable
         """
 
-        dir_deriv = param_dot(grad, step_dir)
+        dir_deriv = param_dot(grad_params, step_dir)
         device = dir_deriv.device
         dtype = dir_deriv.dtype
 
@@ -233,14 +233,14 @@ class InterpolationLineSearch(LineSearchSolver):
 
         # Respect sign convention in "Numerical Optimization" by Noceadal J., which assumes maximization.
         # The sign is reverted at the end of the function.
-        lr_0 = -torch.tensor(lr_init, device=device, dtype=dtype)
+        lr_0 = torch.tensor(lr_init, device=device, dtype=dtype)
 
         # Quadratic interpolation to obtain a new point
         # Calculate first interpolation point
         prev_params = param_scaled_add(params, step_dir, scale=lr_0)
         prev_loss = objective.loss(*prev_params)
 
-        if self.accept_step(params, prev_params, step_dir, lr_init, loss, prev_loss, grad):
+        if self.accept_step(params, prev_params, step_dir, lr_init, loss, prev_loss, grad_params):
             return prev_params, lr_init
 
         # Calculate second interpolation point
@@ -255,8 +255,8 @@ class InterpolationLineSearch(LineSearchSolver):
         n_iters = 0
         while (
             n_iters < self.max_iter
-            and not self.accept_step(params, new_params, step_dir, -lr_1, loss, new_loss, grad)
-            and torch.isclose(lr_1, lr_0, rtol=1e-8, atol=1e-10)
+            and not self.accept_step(params, new_params, step_dir, -lr_1, loss, new_loss, grad_params)
+            and not torch.isclose(lr_1, lr_0, rtol=1e-8, atol=1e-10)
             and lr_1 >= self.tol
         ):
             factor = 1 / ((lr_0 * lr_1) ** 2 * (lr_1 - lr_0) + eps)
@@ -284,26 +284,30 @@ class InterpolationLineSearch(LineSearchSolver):
         if n_iters >= self.max_iter:
             logger.debug("Exceeded the maximum number of line search iterations.")
 
-        logger.info("Settled into lr = %g.", -lr_1)
+        logger.info("Settled into lr = %g.", lr_1)
 
         self.n_iters_ = n_iters
         self.new_lr_ = float(-lr_1.detach().item())
 
-        return new_params, -lr_1
+        return new_params, lr_1
 
 
 class BisectionLineSearch(LineSearchSolver):
     @torch.enable_grad()
-    def line_search(self, params, step_dir, d_p_list, lr_init, objective):
+    def line_search(self, params, step_dir, grad_params, lr_init, objective):
         lr = lr_init
         a_min = 0
         a_max = lr
 
-        new_params = param_scaled_add(params, step_dir, scale=-lr)
+        # new_params = param_scaled_add(params, step_dir, scale=lr)
 
-        new_loss = objective.loss(*new_params)
-        new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=False)
-        new_dir_deriv = param_dot(new_grad, step_dir)
+        # new_loss = objective.loss(*new_params)
+        # new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=False)
+        # new_dir_deriv = param_dot(new_grad, step_dir)
+
+        # new_loss = objective.loss(*new_params)
+        # new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=False)
+        # new_dir_deriv = param_dot(new_grad, step_dir)
 
         logger.info("Starting bisection line search with initial guess of %g with loss of %g.", lr, new_loss)
 
@@ -316,7 +320,7 @@ class BisectionLineSearch(LineSearchSolver):
             elif new_dir_deriv > 0:
                 a_min = lr
 
-            new_params = param_scaled_add(params, step_dir, scale=-lr)
+            new_params = param_scaled_add(params, step_dir, scale=lr)
             new_loss = objective.loss(*new_params)
 
             logger.debug("Iteration %d, new guess is %g which yielded a loss of %g.", n_iters, lr, new_loss)
