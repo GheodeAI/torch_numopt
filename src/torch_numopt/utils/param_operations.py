@@ -230,12 +230,12 @@ def param_is_finite(params: Params):
 
 def param_sizes(params: Params):
     """
-    Obtains the shape of every matrix in the list of parameters provided.
+    Obtains the shape of every matrix in the parameters provided.
 
     Parameters
     ----------
-    params: list
-        List of matrices containing a list of parameters.
+    params: Params
+        Sequence of matrices containing a sequence of parameters.
     """
 
     return tuple(i.shape for i in params)
@@ -243,14 +243,14 @@ def param_sizes(params: Params):
 
 def param_reshape_like(params_flat: torch.Tensor, params: Params):
     """
-    Reshapes a vector into a list of matrices with the same shapes as the `params` parameter.
+    Reshapes a vector into a sequence of matrices with the same shapes as the `params` parameter.
 
     Parameters
     ----------
     params_flat: Tensor
         Vector with the parameters to reshape.
-    params: list
-        List of matrices with the desired shape.
+    params: Params
+        Sequence of matrices with the desired shape.
 
     Returns
     -------
@@ -306,3 +306,6 @@ def param_numel(params: Params) -> int:
     """
 
     return sum(p.numel() for p in params)
+
+def param_argnums(params: Params) -> tuple:
+    return tuple(range(len(params)))

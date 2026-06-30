@@ -158,10 +158,9 @@ class DoglegTRSolver(TrustRegionSolver):
         g_B_g = self.curvature_estimator.quadratic_form(objective, params, grad_params)
 
         if g_B_g <= 0:
-            grad_norm = param_norm(grad_params)
-            scaling = radius / (grad_norm + eps)
-            step_dir = param_scalar_prod(scaling, grad_params)
-            new_params = param_diff(params, step_dir)
+            scaling = radius / (torch.sqrt(grad_norm_sq) + eps)
+            step_dir = param_scalar_prod(-scaling, grad_params)
+            new_params = param_add(params, step_dir)
             return new_params, step_dir
 
         grad_scale = grad_norm_sq / (g_B_g + eps)
@@ -169,8 +168,8 @@ class DoglegTRSolver(TrustRegionSolver):
         norm_psd = param_norm(psd)
 
         if norm_psd >= radius:
-            step_dir = param_scalar_prod((radius / norm_psd), psd)
-            new_params = param_diff(params, step_dir)
+            step_dir = param_scalar_prod(radius / norm_psd, psd)
+            new_params = param_add(params, step_dir)
             return new_params, step_dir
 
         pgn = solve_system(self.curvature_estimator, objective, grad_params, solver=self.solver)
@@ -179,7 +178,7 @@ class DoglegTRSolver(TrustRegionSolver):
         norm_pgn = param_norm(pgn)
         if norm_pgn <= radius:
             step_dir = pgn
-            new_params = param_diff(params, step_dir)
+            new_params = param_add(params, step_dir)
             return new_params, step_dir
 
         a = psd
@@ -191,6 +190,6 @@ class DoglegTRSolver(TrustRegionSolver):
         t = (-ab + torch.sqrt(ab * ab - bb * c)) / (bb + eps)
 
         step_dir = param_scaled_add(a, b, scale=t)
-        new_params = param_diff(params, step_dir)
+        new_params = param_add(params, step_dir)
 
         return new_params, step_dir

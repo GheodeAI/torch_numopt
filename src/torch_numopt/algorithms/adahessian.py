@@ -24,10 +24,10 @@ class AdaHessianMixin:
     # def get_step_direction(self, params, grad_params):
     def get_step_direction(self, objective, grad_params):
         """ """
-        h_list = self.curvature_estimator.scaling_matrix(objective, objective.params)
+        h_params = self.curvature_estimator.scaling_matrix(objective, objective.params)
 
         grad = torch.hstack([i.flatten() for i in grad_params])
-        h_diag = torch.hstack([i.flatten() for i in h_list])
+        h_diag = torch.hstack([i.flatten() for i in h_params])
         eps = self.eps
 
         # Calculate first unbiased moment of the gradient

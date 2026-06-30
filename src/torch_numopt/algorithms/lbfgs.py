@@ -38,7 +38,7 @@ class LBFGSMixin:
 
         return param_neg(r)
 
-    def apply_gradients(self, objective: ObjectiveFunction, params: list, grad_params: list):
+    def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):
         old_params = param_copy(params)
 
         super().apply_gradients(objective, params, grad_params)

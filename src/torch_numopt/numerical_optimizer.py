@@ -141,7 +141,7 @@ class NumericalOptimizer(Optimizer, ABC):
         lr: float
         eval_model: Callable
         params: Params
-        d_p_list: Params
+        grad_params: Params
         """
 
         step_dir = self.get_step_direction(objective, grad_params)
@@ -196,8 +196,8 @@ class NumericalOptimizer(Optimizer, ABC):
 
             self.apply_gradients(
                 objective=objective,
-                params=params_with_grad,
-                grad_params=gradient,
+                params=tuple(params_with_grad),
+                grad_params=tuple(gradient),
             )
 
         self.update()
@@ -243,8 +243,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
         lr: float
         eval_model: Callable
         params: Params
-        d_p_list: Params
-        h_list: Params, optional
+        grad_params: Params
         """
 
         step_dir = self.get_step_direction(objective, grad_params)
@@ -331,7 +330,7 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         lr: float
         objective: ObjectiveFunction
         params: Params
-        d_p_list: Params
+        grad_params: Params
         """
 
         prev_loss = objective.loss(*params)

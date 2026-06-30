@@ -43,16 +43,19 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
 
         # Calculate exact Hessian matrix
         if not objective.batched:
-            logger.info("Computing the exact hessian matrix.")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Computing the exact hessian matrix.")
 
             # Calculate hessian with every sample in the dataset
-            h_params = list(torch.func.hessian(objective.loss, argnums=tuple(range(len(params))))(*params))
-            for i, _ in enumerate(h_params):
-                h_params[i] = self._reshape_hessian(h_params[i][i])
+            h_params = [None] * len(params)
+            for i, _ in enumerate(params):
+                h_params_block = torch.func.hessian(objective.loss, argnums=(i,))(*params)
+                h_params[i] = self._reshape_hessian(h_params_block[0][0])
 
         else:
             # Calculate hessian for each batch and add the results
-            logger.info("Computing the exact hessian matrix split in %d batches of size %d.", objective.n_batches, objective.batch_size)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Computing the exact hessian matrix split in %d batches of size %d.", objective.n_batches, objective.batch_size)
 
             h_params = None
             for i in range(objective.n_batches):
@@ -72,16 +75,16 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
                 else:
                     h_params = param_add(h_params, h_param_batch)
 
-                logger.info("Computed batch %d for the exact hessian...", i)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Computed batch %d for the exact hessian...", i)
 
             if objective.reduction == "mean":
                 h_params = param_scalar_prod(1 / objective.data_size, h_params)
-            
+
         h_params = list(h_params)
 
         # Damp matrix
         if self.damping is not None:
-            logger.info("Applying damping to the exact hessian...")
             for i, h in enumerate(h_params):
                 if self.damping == "identity":
                     h_params[i] = h + self.mu * torch.eye(h.shape[0], device=h.device)
@@ -93,32 +96,47 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
         return tuple(h_params)
 
     def hvp(self, objective: ObjectiveFunction, params: Params, step_dir: Params) -> Params:
-        logger.info("Computing the product p^T H p.")
-
         if not objective.batched:
-            loss = objective.loss(*params)
-            result = []
-            grad_params = torch.autograd.grad(loss, params, create_graph=True)
-            for p, grad_p, s_dir in zip(params, grad_params, step_dir):
-                dir_deriv_p = param_dot(grad_p, s_dir)
-                hess_dot_step_p = torch.autograd.grad(dir_deriv_p, p, retain_graph=True)[0]
-                result.append(hess_dot_step_p)
-            hess_dot_step = tuple(result)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Computing the exact hessian vector product.")
+
+            zero_vector = tuple(torch.zeros_like(p) for p in params)
+            hess_dot_step = [None] * len(params)
+            for i, s_d in enumerate(step_dir):
+                block_step_dir = zero_vector[:i] + (s_d,) + zero_vector[i+1:]
+                _, hess_dot_step_block = torch.autograd.functional.vhp(objective.loss, params, v=block_step_dir)
+                hess_dot_step[i] = hess_dot_step_block[i]
+            hess_dot_step = tuple(hess_dot_step)
+
+            # loss = objective.loss(*params)
+            # grad = torch.autograd.grad(loss, params, create_graph=True, retain_graph=True)
+            # hess_dot_step = [None] * len(params)
+            # for i, (p, s, g) in enumerate(zip(params, step_dir, grad)):
+            #     if torch.all(s == 0):
+            #         hess_dot_step.append(torch.zeros_like(p))
+            #         continue
+                    
+            #     grad_dot_s = param_dot(g, s)
+            #     hvp_i = torch.autograd.grad(grad_dot_s, p, retain_graph=True, create_graph=False)[0]
+            #     hess_dot_step[i] = hvp_i
+            
+            # hess_dot_step = tuple(hess_dot_step)
         else:
-            logger.info("Computing the exact hessian vector product split in %d batches of size %d.", objective.n_batches, objective.batch_size)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Computing the exact hessian vector product split in %d batches of size %d.", objective.n_batches, objective.batch_size)
 
             hess_dot_step = None
             for i in range(objective.n_batches):
                 # Calculate hessian of the batch
 
                 batched_loss = objective.loss(*params, batch_idx=i)
-                result = []
-                grad_params = torch.autograd.grad(batched_loss, params, create_graph=True)
-                for p, grad_p, s_dir in zip(params, grad_params, step_dir):
-                    dir_deriv_p = param_dot(grad_p, s_dir)
-                    hess_dot_step_p = torch.autograd.grad(dir_deriv_p, p, retain_graph=True)[0]
-                    result.append(hess_dot_step_p)
-                hess_dot_step_batch = tuple(result)
+                hess_dot_step_batch = [None] * len(params)
+                for i, (p, s_d) in enumerate(zip(params, step_dir)):
+                    grad_fn = torch.func.grad(batched_loss, argnums=i)
+                    tangents = zero_params[:i] + (s_d,) + zero_params[i+1:]
+                    _, hess_dot_step_p = torch.func.jvp(grad_fn, params, tuple(tangents))
+                    hess_dot_step_batch[i] = hess_dot_step_p
+                hess_dot_step_batch = tuple(hess_dot_step_batch)
 
                 if objective.reduction == "mean":
                     hess_dot_step_batch = param_scalar_prod(objective.batch_data_size(i), hess_dot_step_batch)
@@ -127,14 +145,15 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
                     hess_dot_step = hess_dot_step_batch
                 else:
                     hess_dot_step = param_add(hess_dot_step, hess_dot_step_batch)
-                logger.info("Computed batch %d for the exact hessian vector product...", i)
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Computed batch %d for the exact hessian vector product...", i)
 
             if objective.reduction == "mean":
                 hess_dot_step = param_scalar_prod(1 / objective.data_size, hess_dot_step)
 
         # Damp vector
         if self.damping is not None:
-            logger.info("Applying damping to the exact hessian...")
             if self.damping == "identity":
                 hess_dot_step = param_add(hess_dot_step, param_scalar_prod(self.mu, step_dir))
             elif self.damping == "fletcher":
@@ -144,5 +163,5 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
 
         return hess_dot_step
 
-    def quadratic_form(self, objective, params: Params, d_p_list: Params) -> torch.Tensor:
-        return param_dot(d_p_list, self.hvp(objective, params, d_p_list))
+    def quadratic_form(self, objective, params: Params, grad_params: Params) -> torch.Tensor:
+        return param_dot(grad_params, self.hvp(objective, params, grad_params))

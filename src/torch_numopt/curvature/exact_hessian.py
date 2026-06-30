@@ -3,7 +3,7 @@ from typing import Optional
 import logging
 import torch
 from functools import partial
-from ..utils import param_dot, param_scalar_prod, param_add
+from ..utils import param_dot, param_scalar_prod, param_add, param_argnums
 from ..curvature_estimator import CurvatureEstimator
 from ..objective import ObjectiveFunction
 from ..utils import Params
@@ -55,7 +55,8 @@ class ExactHessianCalculator(CurvatureEstimator):
 
         # Calculate exact Hessian matrix
         if not objective.batched:
-            logger.info("Computing the exact hessian matrix.")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Computing the exact hessian matrix.")
 
             # Calculate hessian with every sample in the dataset
             h_params = torch.func.hessian(objective.loss, argnums=tuple(range(len(params))))(*params)
@@ -63,7 +64,8 @@ class ExactHessianCalculator(CurvatureEstimator):
 
         else:
             # Calculate hessian for each batch and add the results
-            logger.info("Computing the exact hessian matrix split in %d batches of size %d.", objective.n_batches, objective.batch_size)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Computing the exact hessian matrix split in %d batches of size %d.", objective.n_batches, objective.batch_size)
 
             h_params = None
             for i in range(objective.n_batches):
@@ -82,43 +84,38 @@ class ExactHessianCalculator(CurvatureEstimator):
                 else:
                     h_params = h_params + h_param_batch
 
-                logger.info("Computed batch %d for the exact hessian...", i)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Computed batch %d for the exact hessian...", i)
 
             if objective.reduction == "mean":
                 h_params = h_params / objective.data_size
 
         # Damp matrix
         if self.damping is not None:
-            logger.info("Applying damping to the exact hessian...")
-
-        if self.damping == "identity":
-            h_params = h_params + self.mu * torch.eye(h_params.shape[0], device=h_params.device)
-        elif self.damping == "fletcher":
-            h_params = h_params + self.mu * torch.diag(h_params.diagonal())
-        elif self.damping is not None:
-            raise ValueError(f"Invalid damping strategy {self.damping}.")
+            if self.damping == "identity":
+                # h_params = h_params + self.mu * torch.eye(h_params.shape[0], device=h_params.device)
+                h_params.diagonal().add_(self.mu)
+            elif self.damping == "fletcher":
+                # h_params = h_params + self.mu * torch.diag(h_params.diagonal())
+                h_params.diagonal().add_(h_params.diagonal())
+            else:
+                raise ValueError(f"Invalid damping strategy {self.damping}.")
 
         return h_params
 
     def hvp(self, objective: ObjectiveFunction, params: Params, step_dir: Params) -> Params:
-        logger.info("Computing the product p^T H p.")
-
         if not objective.batched:
-            loss = objective.loss(*params)
-            grad_params = torch.autograd.grad(loss, tuple(params), create_graph=True, retain_graph=True)
-            dir_deriv_params = param_dot(grad_params, step_dir)
-            # dir_deriv_params = sum((g * v).sum() for g, v in zip(grad_params, step_dir))
-            hess_dot_step = torch.autograd.grad(dir_deriv_params, tuple(params), retain_graph=True)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.info("Computing the exact hessian vector product.")
+            _, hess_dot_step = torch.autograd.functional.vhp(objective.loss, params, v=step_dir)
         else:
-            logger.info("Computing the exact hessian vector product split in %d batches of size %d.", objective.n_batches, objective.batch_size)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Computing the exact hessian vector product split in %d batches of size %d.", objective.n_batches, objective.batch_size)
 
             hess_dot_step = None
             for i in range(objective.n_batches):
-                # Calculate hessian of the batch
-                batched_loss = objective.loss(*params, batch_idx=i)
-                grad_params_batch = torch.autograd.grad(batched_loss, tuple(params), create_graph=True, retain_graph=True)
-                dir_deriv_params = param_dot(grad_params_batch, step_dir)
-                hess_dot_step_batch = torch.autograd.grad(dir_deriv_params, tuple(params), retain_graph=False)
+                batched_loss = partial(objective.loss, batch_idx=i)
+                _, hess_dot_step_batch = torch.autograd.functional.vhp(batched_loss, params, v=step_dir)
 
                 if objective.reduction == "mean":
                     hess_dot_step_batch = objective.batch_data_size(i) * hess_dot_step_batch
@@ -127,23 +124,23 @@ class ExactHessianCalculator(CurvatureEstimator):
                     hess_dot_step = hess_dot_step_batch
                 else:
                     hess_dot_step = param_add(hess_dot_step, hess_dot_step_batch)
-                logger.info("Computed batch %d for the exact hessian vector product...", i)
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Computed batch %d for the exact hessian vector product...", i)
 
             if objective.reduction == "mean":
                 hess_dot_step = hess_dot_step / objective.data_size
 
         # Damp vector
         if self.damping is not None:
-            logger.info("Applying damping to the exact hessian...")
-
-        if self.damping == "identity":
-            hess_dot_step = param_add(hess_dot_step, param_scalar_prod(self.mu, step_dir))
-        elif self.damping == "fletcher":
-            raise NotImplementedError("Fletcher damping not available for hvp.")
-        elif self.damping is not None:
-            raise ValueError(f"Invalid damping strategy {self.damping}.")
+            if self.damping == "identity":
+                hess_dot_step = param_add(hess_dot_step, param_scalar_prod(self.mu, step_dir))
+            elif self.damping == "fletcher":
+                raise NotImplementedError("Fletcher damping not available for hvp.")
+            else:
+                raise ValueError(f"Invalid damping strategy {self.damping}.")
 
         return hess_dot_step
 
-    def quadratic_form(self, objective, params: Params, d_p_list: Params) -> torch.Tensor:
-        return param_dot(d_p_list, self.hvp(objective, params, d_p_list))
+    def quadratic_form(self, objective, params: Params, grad_params: Params) -> torch.Tensor:
+        return param_dot(grad_params, self.hvp(objective, params, grad_params))

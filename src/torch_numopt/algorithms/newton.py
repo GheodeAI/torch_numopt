@@ -3,7 +3,7 @@ import torch.nn as nn
 from ..line_search import create_line_search_solver
 from ..trust_region import create_trust_region_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
-from ..curvature import ExactBlockHessianCalculator
+from ..curvature import ExactBlockHessianCalculator, ExactHessianCalculator
 from ..utils import Params
 
 
@@ -230,7 +230,7 @@ class NewtonCG(NumericalOptimizer):
     ):
         super().__init__(
             params,
-            curvature_estimator=ExactBlockHessianCalculator(damping=damping, mu=mu),
+            curvature_estimator=ExactHessianCalculator(damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             solver="cg-trunc",
@@ -291,7 +291,7 @@ class NewtonCGLS(LineSearchOptimizer):
     ):
         super().__init__(
             params,
-            curvature_estimator=ExactBlockHessianCalculator(damping=damping, mu=mu),
+            curvature_estimator=ExactHessianCalculator(damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(

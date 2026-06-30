@@ -62,8 +62,8 @@ def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveF
             if curvature_estimator.uses_blocks:
                 logger.debug("Using block-form matrix...")
                 solution_params = [None] * len(rhs_params)
-                B_list = curvature_estimator.scaling_matrix(objective, params)
-                for i, (rhs, B) in enumerate(zip(rhs_params, B_list)):
+                B_params = curvature_estimator.scaling_matrix(objective, params)
+                for i, (rhs, B) in enumerate(zip(rhs_params, B_params)):
                     if not torch.all(torch.isfinite(B)):
                         raise ValueError("NaN found in scaling matrix.")
 
@@ -128,8 +128,8 @@ def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveF
 
     elif curvature_estimator.ndim == 1:
         logger.debug("Using diagonal form of curvature, dividing component-wise...")
-        B_list = curvature_estimator.scaling_matrix(objective, rhs_params)
-        solution_params = tuple(rhs / (h + eps) for rhs, h in zip(rhs_params, B_list))
+        B_params = curvature_estimator.scaling_matrix(objective, rhs_params)
+        solution_params = tuple(rhs / (h + eps) for rhs, h in zip(rhs_params, B_params))
     elif curvature_estimator.ndim == 0:
         logger.debug("Using scalar form of curvature, dividing by the scalar...")
         B = curvature_estimator.scaling_matrix(objective, rhs_params)

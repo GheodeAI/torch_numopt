@@ -138,11 +138,9 @@ class GaussNewtonTR(TrustRegionOptimizer):
         trust_region_method: str = "cauchy",
         solver: str = "solve",
     ):
-        curvature_estimator = GaussNewtonBlockApproximation()
         super().__init__(
             params,
-            curvature_estimator=curvature_estimator,
-            trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=curvature_estimator, solver=solver),
+            trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=GaussNewtonBlockApproximation(), solver=solver),
             radius_init=radius_init,
             solver=solver,
         )

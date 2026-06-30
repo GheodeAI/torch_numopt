@@ -17,7 +17,9 @@ class HutchinsonDiagonalApproximation(CurvatureEstimator):
         param_size = param_numel(params)
         device = params[0].device
         h_diag = param_zero_like(params)
-        logger.debug("Computing diagonal Hutchinson approximation of the hessian with %d samples.", self.n_samples)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Computing diagonal Hutchinson approximation of the hessian with %d samples.", self.n_samples)
+
         for i in range(self.n_samples):
             # Rademacher sample
             z_flat = 2 * torch.randint(0, 2, size=(param_size,), device=device, dtype=torch.uint8).float() - 1
@@ -28,7 +30,8 @@ class HutchinsonDiagonalApproximation(CurvatureEstimator):
 
             h_diag = param_add(h_diag, param_mult(z, Hz))
 
-            logger.debug("Calculated approximation for random sample number %d...", i)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Calculated approximation for random sample number %d...", i)
 
         h_diag = param_scalar_prod(1 / self.n_samples, h_diag)
 
