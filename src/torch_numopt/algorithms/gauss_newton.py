@@ -1,8 +1,9 @@
 from __future__ import annotations
-import torch.nn as nn
 from ..line_search import create_line_search_solver
-from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
-from ..curvature import GaussNewtonBlockApproximation
+from ..trust_region import create_trust_region_solver
+from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
+from ..curvature import GaussNewtonBlockApproximation, GaussNewtonApproximation
+from ..utils import Params
 
 
 class GaussNewton(NumericalOptimizer):
@@ -35,16 +36,11 @@ class GaussNewton(NumericalOptimizer):
     """
 
     def __init__(
-        self,
-        model: nn.Module,
-        lr_init: float = 1,
-        lr_method: str | None = None,
-        solver: str = "solve",
-        batch_size: int | None = None,
+        self, params: Params, lr_init: float = 1e-3, lr_method: str | None = None, solver: str = "solve", damping: str | None = None, mu: float = 1
     ):
         super().__init__(
-            model,
-            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=None),
+            params,
+            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
             solver=solver,
@@ -82,7 +78,7 @@ class GaussNewtonLS(LineSearchOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         c1: float = 1e-4,
@@ -93,15 +89,57 @@ class GaussNewtonLS(LineSearchOptimizer):
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         solver: str = "solve",
-        batch_size: int | None = None,
     ):
         super().__init__(
-            model,
-            curvature_estimator=GaussNewtonBlockApproximation(model=model, batch_size=batch_size, damping=None),
+            params,
+            curvature_estimator=GaussNewtonBlockApproximation(),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
                 method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
             ),
             solver=solver,
+        )
+
+
+class GaussNewtonTR(TrustRegionOptimizer):
+    """
+    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+
+    Parameters
+    ----------
+
+    model: nn.Module
+        The model to be optimized
+    lr_init: float
+        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
+    lr_method: str
+        Method to use to initialize the learning rate before applying line search.
+    c1: float
+        Coefficient of the sufficient increase condition in backtracking line search.
+    c2: float
+        Coefficient used in the second condition for wolfe conditions.
+    tau: float
+        Factor used to reduce the step size in each step of the backtracking line search.
+    line_search_method: str
+        Method used for line search, options are "backtrack" and "constant".
+    line_search_cond: str
+        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
+    solver: str
+        Method to use to invert the hessian.
+    batch_size: int
+        Size of the amount of data to use at a time to calculate the hessian matrix.
+    """
+
+    def __init__(
+        self,
+        params: Params,
+        radius_init: float = 1.0,
+        trust_region_method: str = "exact",
+        solver: str = "solve",
+    ):
+        super().__init__(
+            params,
+            trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=GaussNewtonApproximation(), solver=solver),
+            radius_init=radius_init,
         )

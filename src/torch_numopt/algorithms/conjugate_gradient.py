@@ -1,56 +1,61 @@
 from __future__ import annotations
-from typing import Iterable
 import torch
 import torch.nn as nn
+
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
 from ..curvature import NaiveIdentityCalculator
-from ..utils import param_reshape_like
+from ..utils import param_dot, param_neg, param_scaled_add, param_diff, param_numel, Params
+
 
 class ConjugateGradientMixin:
-    def __init__(
-        self,
-        *args,
-        cg_method: str = "PRP+",
-        **kwargs
-    ):
+    def __init__(self, *args, cg_method: str = "PRP+", **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Conjugate gradient memory
         self.cg_method = cg_method
+        self.iter_count = 0
+        self.reset = False
 
-    def get_step_direction(self, params, d_p_list):
+    def get_step_direction(self, objective, grad_params):
         """ """
 
-        if self.prev_grad_ is None:
-            return d_p_list
+        self.reset = False
+        step_dir = param_neg(grad_params)
 
-        grad = torch.hstack([i.ravel() for i in d_p_list])
-        prev_grad = torch.hstack([i.ravel() for i in self.prev_grad_])
-        prev_step = torch.hstack([i.ravel() for i in self.prev_step_dir_])
+        if self.prev_grad is None:
+            return step_dir
 
-        res = -grad
-        prev_res = -prev_grad
+        prev_grad = self.prev_grad
+        prev_step = self.prev_step_dir
 
-        eps = torch.finfo(res.dtype).eps
+        eps = torch.finfo(grad_params[0].dtype).eps
         match self.cg_method:
             case "FR":
-                beta = torch.dot(res, res) / (torch.dot(prev_res, prev_res) + eps)
+                beta = param_dot(grad_params, grad_params) / (param_dot(prev_grad, prev_grad) + eps)
             case "PR":
-                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
+                beta = param_dot(grad_params, param_diff(grad_params, prev_grad)) / (param_dot(prev_grad, prev_grad) + eps)
+                self.reset = param_dot(prev_grad, grad_params) >= 0.2 * param_dot(grad_params, grad_params)
             case "PRP+":
-                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_res, prev_res) + eps)
+                beta = param_dot(grad_params, param_diff(grad_params, prev_grad)) / (param_dot(prev_grad, prev_grad) + eps)
                 beta = torch.relu(beta)
+                self.reset = param_dot(prev_grad, grad_params) >= 0.2 * param_dot(grad_params, grad_params)
             case "HS":
-                beta = torch.dot(res, res - prev_res) / (torch.dot(prev_step, res - prev_res) + eps)
+                beta = param_dot(grad_params, param_diff(grad_params, prev_grad)) / (-param_dot(prev_step, param_diff(grad_params, prev_grad)) + eps)
             case "DY":
-                beta = torch.dot(res, res) / (torch.dot(-prev_step, res - prev_res) + eps)
+                beta = param_dot(grad_params, grad_params) / (-param_dot(prev_step, param_diff(grad_params, prev_grad)) + eps)
             case _:
                 raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'.")
 
-        # Invert sign since we update the weights like x - lr*step
-        next_dir = param_reshape_like(grad - beta * prev_step, d_p_list)
-        return next_dir
+        cg_step = param_scaled_add(grad_params, prev_step, scale=beta)
+
+        self.iter_count += 1
+        if self.iter_count >= param_numel(grad_params) or param_dot(grad_params, cg_step) > 0:
+            self.reset = True
+            self.iter_count = 0
+
+        if param_dot(grad_params, cg_step) > 0:
+            return param_neg(grad_params)
+
+        return param_neg(cg_step)
 
 
 class ConjugateGradient(ConjugateGradientMixin, NumericalOptimizer):
@@ -84,18 +89,12 @@ class ConjugateGradient(ConjugateGradientMixin, NumericalOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
-        lr_init: float = 1,
-        lr_method: str | None = None,
+        params: Params,
+        lr_init: float = 1.0,
+        lr_method: str | None = "lipschitz",
         cg_method: str = "PRP+",
     ):
-        super().__init__(
-            model,
-            curvature_estimator=NaiveIdentityCalculator(model=model),
-            lr_init=lr_init,
-            lr_method=lr_method,
-            cg_method=cg_method
-        )
+        super().__init__(params, curvature_estimator=NaiveIdentityCalculator(), lr_init=lr_init, lr_method=lr_method, cg_method=cg_method)
 
 
 class ConjugateGradientLS(ConjugateGradientMixin, LineSearchOptimizer):
@@ -129,8 +128,8 @@ class ConjugateGradientLS(ConjugateGradientMixin, LineSearchOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
-        lr_init: float = 1,
+        params: nn.Module,
+        lr_init: float = 1.0,
         lr_method: str = None,
         c1: float = 1e-4,
         c2: float = 0.9,
@@ -142,12 +141,12 @@ class ConjugateGradientLS(ConjugateGradientMixin, LineSearchOptimizer):
         cg_method: str = "PRP+",
     ):
         super().__init__(
-            model,
-            curvature_estimator=NaiveIdentityCalculator(model=model),
+            params,
+            curvature_estimator=NaiveIdentityCalculator(),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
                 method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
             ),
-            cg_method=cg_method
+            cg_method=cg_method,
         )

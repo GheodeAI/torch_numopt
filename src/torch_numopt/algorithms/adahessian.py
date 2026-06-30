@@ -1,22 +1,13 @@
 from __future__ import annotations
 import torch
-import torch.nn as nn
-from ..utils import param_reshape_like
+from ..utils import param_reshape_like, Params
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer
 from ..curvature import HutchinsonDiagonalApproximation
 
+
 class AdaHessianMixin:
-    def __init__(
-        self,
-        *args,
-        beta1=0.9,
-        beta2=0.999,
-        k: float = 1,
-        eps: float = 1e-4,
-        skip_iters: int = 0,
-        **kwargs
-    ):
+    def __init__(self, *args, beta1=0.9, beta2=0.999, k: float = 1, eps: float = 1e-4, skip_iters: int = 0, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.beta1 = beta1
@@ -30,12 +21,12 @@ class AdaHessianMixin:
         self.eps = eps
         self.skip_iters = skip_iters
 
-    def get_step_direction(self, params, d_p_list):
+    def get_step_direction(self, objective, grad_params):
         """ """
-        h_list = self.curvature_estimator.scaling_matrix()
+        h_params = self.curvature_estimator.scaling_matrix(objective, objective.params)
 
-        grad = torch.hstack([i.flatten() for i in d_p_list])
-        h_diag = torch.hstack([i.flatten() for i in h_list])
+        grad = torch.hstack([i.flatten() for i in grad_params])
+        h_diag = torch.hstack([i.flatten() for i in h_params])
         eps = self.eps
 
         # Calculate first unbiased moment of the gradient
@@ -51,9 +42,9 @@ class AdaHessianMixin:
         self.beta2_acc *= self.beta2
 
         # Calculate the next step direction
-        next_dir_flat = first_moment_unbias / (hess_moment_unbias ** (0.5 * self.k) + eps)
+        next_dir_flat = -first_moment_unbias / (hess_moment_unbias ** (0.5 * self.k) + eps)
 
-        return param_reshape_like(next_dir_flat, d_p_list)
+        return param_reshape_like(next_dir_flat, grad_params)
 
 
 class AdaHessian(AdaHessianMixin, NumericalOptimizer):
@@ -83,7 +74,7 @@ class AdaHessian(AdaHessianMixin, NumericalOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         beta1=0.9,
@@ -91,20 +82,20 @@ class AdaHessian(AdaHessianMixin, NumericalOptimizer):
         k: float = 1,
         eps: float = 1e-4,
         skip_iters: int = 0,
-        n_samples:int = 1
+        n_samples: int = 1,
     ):
         super().__init__(
-            model,
-            curvature_estimator=HutchinsonDiagonalApproximation(model=model, n_samples=n_samples),
+            params,
+            curvature_estimator=HutchinsonDiagonalApproximation(n_samples=n_samples),
             lr_init=lr_init,
             lr_method=lr_method,
             beta1=beta1,
             beta2=beta2,
             k=k,
             eps=eps,
-            skip_iters=skip_iters
+            skip_iters=skip_iters,
+            fix_ascent=False,
         )
-
 
 
 class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
@@ -134,7 +125,7 @@ class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str | None = None,
         beta1=0.9,
@@ -151,8 +142,8 @@ class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
         line_search_cond: str = "armijo",
     ):
         super().__init__(
-            model,
-            curvature_estimator=HutchinsonDiagonalApproximation(model=model, n_samples=1),
+            params,
+            curvature_estimator=HutchinsonDiagonalApproximation(n_samples=1),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
@@ -162,5 +153,5 @@ class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
             beta2=beta2,
             k=k,
             eps=eps,
-            skip_iters=skip_iters
+            skip_iters=skip_iters,
         )

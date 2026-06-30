@@ -18,12 +18,12 @@ sys.path.insert(0, os.path.abspath("./src/torch_numopt"))
 
 # -- Project information -----------------------------------------------------
 
-project = 'torch_numopt'
-author = 'Eugenio Lorente-Ramos'
-copyright = f'2024, {author}'
+project = "torch_numopt"
+author = "Eugenio Lorente-Ramos"
+copyright = f"2024, {author}"
 
 # The full version, including alpha/beta/rc tags
-release = '0.3.1'
+release = "0.3.1"
 
 # -- General configuration ---------------------------------------------------
 
