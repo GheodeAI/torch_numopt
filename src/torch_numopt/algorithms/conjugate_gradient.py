@@ -13,10 +13,12 @@ class ConjugateGradientMixin:
         super().__init__(*args, **kwargs)
         self.cg_method = cg_method
         self.iter_count = 0
-        self.do_reset = False
+        self.reset = False
 
     def get_step_direction(self, objective, grad_params):
         """ """
+
+        self.reset = False
         step_dir = param_neg(grad_params)
 
         if self.prev_grad is None:
@@ -31,11 +33,11 @@ class ConjugateGradientMixin:
                 beta = param_dot(grad_params, grad_params) / (param_dot(prev_grad, prev_grad) + eps)
             case "PR":
                 beta = param_dot(grad_params, param_diff(grad_params, prev_grad)) / (param_dot(prev_grad, prev_grad) + eps)
-                self.do_reset = param_dot(prev_grad, grad_params) >= 0.2 * param_dot(grad_params, grad_params)
+                self.reset = param_dot(prev_grad, grad_params) >= 0.2 * param_dot(grad_params, grad_params)
             case "PRP+":
                 beta = param_dot(grad_params, param_diff(grad_params, prev_grad)) / (param_dot(prev_grad, prev_grad) + eps)
                 beta = torch.relu(beta)
-                self.do_reset = param_dot(prev_grad, grad_params) >= 0.2 * param_dot(grad_params, grad_params)
+                self.reset = param_dot(prev_grad, grad_params) >= 0.2 * param_dot(grad_params, grad_params)
             case "HS":
                 beta = param_dot(grad_params, param_diff(grad_params, prev_grad)) / (-param_dot(prev_step, param_diff(grad_params, prev_grad)) + eps)
             case "DY":
@@ -43,28 +45,17 @@ class ConjugateGradientMixin:
             case _:
                 raise ValueError("Incorrect conjugate gradient method, try 'FR', 'PR' or 'PRP+', 'HS', 'DY'.")
 
-        self.iter_count += 1
-        self.do_reset = self.do_reset or (self.iter_count >= param_numel(grad_params))
-
         cg_step = param_scaled_add(grad_params, prev_step, scale=beta)
+
+        self.iter_count += 1
+        if self.iter_count >= param_numel(grad_params) or param_dot(grad_params, cg_step) > 0:
+            self.reset = True
+            self.iter_count = 0
+
         if param_dot(grad_params, cg_step) > 0:
-            self.do_reset = True
             return param_neg(grad_params)
 
         return param_neg(cg_step)
-
-    def update(self):
-        if self.do_reset:
-            self.prev_lr = None
-            self.prev_lr_init = None
-            self.prev_params = None
-            self.prev_step_dir = None
-            self.prev_grad = None
-            self.prev_loss = None
-            self.iter_count = 0
-        else:
-            super().update()
-        self.do_reset = False
 
 
 class ConjugateGradient(ConjugateGradientMixin, NumericalOptimizer):
@@ -145,7 +136,7 @@ class ConjugateGradientLS(ConjugateGradientMixin, LineSearchOptimizer):
         tau: float = 0.1,
         max_iter: int = 20,
         tol: float = 1e-8,
-        line_search_method: str = "backtracking",
+        line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         cg_method: str = "PRP+",
     ):

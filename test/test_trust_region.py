@@ -14,10 +14,10 @@ from torch_numopt.curvature import (
 from torch_numopt.objective import ObjectiveFunction
 from torch_numopt.utils import param_dot, param_norm, param_scaled_add, param_diff
 
-
 # ----------------------------------------------------------------------
 # Helper: Quadratic objective (same as for line search)
 # ----------------------------------------------------------------------
+
 
 class QuadraticObjective(ObjectiveFunction):
     def __init__(self, A, b):
@@ -48,6 +48,7 @@ def diag_quadratic(diag_a, b):
 # ----------------------------------------------------------------------
 # Fixtures
 # ----------------------------------------------------------------------
+
 
 @pytest.fixture
 def scalar_obj():
@@ -97,6 +98,7 @@ def naive_curvature():
 # Analytical solutions for trust-region subproblem (2D)
 # ----------------------------------------------------------------------
 
+
 def analytical_cauchy_point(g, H, radius):
     """
     Cauchy point for quadratic: p_c = - (g^T g) / (g^T H g) * g  if g^T H g > 0,
@@ -138,7 +140,7 @@ def analytical_dogleg(g, H, radius):
     a = torch.dot(d, d)
     b = 2 * torch.dot(p_gn, d)
     c = torch.dot(p_gn, p_gn) - radius**2
-    t = (-b + torch.sqrt(b**2 - 4*a*c)) / (2*a)  # the positive root
+    t = (-b + torch.sqrt(b**2 - 4 * a * c)) / (2 * a)  # the positive root
     t = torch.clamp(t, 0, 1)
     return t * p_c + (1 - t) * p_gn
 
@@ -146,6 +148,7 @@ def analytical_dogleg(g, H, radius):
 # ----------------------------------------------------------------------
 # Tests for CauchyPointTRSolver
 # ----------------------------------------------------------------------
+
 
 def test_cauchy_point_scalar(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     radius = 0.5
@@ -181,6 +184,7 @@ def test_cauchy_point_2d(diag_obj, diag_params, diag_grad, exact_curvature):
 # ----------------------------------------------------------------------
 # Tests for DoglegTRSolver
 # ----------------------------------------------------------------------
+
 
 def test_dogleg_scalar_large_radius(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     # Radius large enough to contain Newton step
@@ -244,6 +248,7 @@ def test_dogleg_non_positive_definite(diag_obj, diag_params, diag_grad):
 # Tests for ExactTRSolver
 # ----------------------------------------------------------------------
 
+
 def test_exact_tr_scalar(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     radius = 1.0
     solver = ExactTRSolver(curvature_estimator=exact_curvature, iters=20, tol=1e-10)
@@ -305,25 +310,27 @@ def test_exact_tr_non_positive_definite(diag_obj, diag_params, diag_grad):
 # Test the factory function
 # ----------------------------------------------------------------------
 
+
 def test_create_trust_region_solver():
     curv = NaiveIdentityCalculator()
-    solver = create_trust_region_solver('cauchy', curv)
+    solver = create_trust_region_solver("cauchy", curv)
     assert isinstance(solver, CauchyPointTRSolver)
 
-    solver = create_trust_region_solver('dogleg', curv)
+    solver = create_trust_region_solver("dogleg", curv)
     assert isinstance(solver, DoglegTRSolver)
 
-    solver = create_trust_region_solver('exact', curv, iters=10)
+    solver = create_trust_region_solver("exact", curv, iters=10)
     assert isinstance(solver, ExactTRSolver)
     assert solver.iters == 10
 
     with pytest.raises(ValueError):
-        create_trust_region_solver('unknown', curv)
+        create_trust_region_solver("unknown", curv)
 
 
 # ----------------------------------------------------------------------
 # Test that the model value computed by TrustRegionSolver is correct
 # ----------------------------------------------------------------------
+
 
 def test_model_evaluation(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     solver = CauchyPointTRSolver(curvature_estimator=exact_curvature)

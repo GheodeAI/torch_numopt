@@ -1,191 +1,156 @@
 from __future__ import annotations
+import logging
 import torch
+
+from torch_numopt.objective import ObjectiveFunction
+from torch_numopt.utils.param_operations import Params, param_detach, param_dot, param_neg, param_norm, param_scaled_add
+from torch_numopt.utils.utils import torch_to_float
 
 from ..line_search import create_line_search_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
 from ..curvature import GaussNewtonBlockApproximation
-from ..utils import Params, param_dot, param_scalar_prod, param_norm, param_copy
+
+# from ..utils import Params, param_dot, param_scalar_prod, param_norm, param_copy, param_diff
+from ..utils import *
+from ..trust_region import CauchyPointTRSolver
+
+logger = logging.getLogger(__name__)
 
 
-class LevenbergMarquardtMixin:
-    def __init__(self, *args, mu_dec: float = 0.01, mu_max: float = 1e10, **kwargs):
-        super().__init__(*args, **kwargs)
+class LevenbergMarquardt(TrustRegionOptimizer):
+    """
+    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+    and the matlab implementation of 'learnlm' https://es.mathworks.com/help/deeplearning/ref/trainlm.html#d126e69092
+
+    Parameters
+    ----------
+
+    model: nn.Module
+        The model to be optimized
+    lr_init: float
+        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
+    lr_method: str
+        Method to use to initialize the learning rate before applying line search.
+    mu: float
+        Initial value for the coefficient used when adding a diagonal matrix to the Hessian approximation.
+    mu_dec: float
+        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
+    mu_max: float
+        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
+    use_diagonal: bool
+        Whether to use the diagonal of the Hessian approximation instead of an identity matrix to adjust the Hessian matrix.
+    c1: float
+        Coefficient of the sufficient increase condition in backtracking line search.
+    c2: float
+        Coefficient used in the second condition for wolfe conditions.
+    tau: float
+        Factor used to reduce the step size in each step of the backtracking line search.
+    line_search_method: str
+        Method used for line search, options are "backtrack" and "constant".
+    line_search_cond: str
+        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
+    solver: str
+        Method to use to invert the hessian.
+    batch_size: int
+        Size of the amount of data to use at a time to calculate the hessian matrix.
+    """
+
+    def __init__(
+        self,
+        params: Params,
+        mu: float = 1e-2,
+        mu_dec: float = 0.1,
+        mu_max: float = 1e10,
+        accept_tol = 0,
+        damping: str = "fletcher",
+        solver: str = "cholesky",
+    ):
+        assert damping is not None
+        super().__init__(
+            params,
+            trust_region=CauchyPointTRSolver(curvature_estimator=GaussNewtonBlockApproximation(damping=None)),
+            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
+            accept_tol=accept_tol,
+        )
+        self.solver = solver
         self.mu_dec = mu_dec
         self.mu_max = mu_max
 
-    def update(self):
-        if self.prev_loss is None:
-            super().update()
-            return
+    def new_model_radius(self, objective, radius, radius_init, loss, params, grad_params, new_loss, step_dir):
+        """
+        Update the model radius from the loss in the current iteration.
+        """
 
-        eps = 1e-12
+        eps = torch.finfo(loss.dtype).eps
 
-        lr = self.curr_lr
-        grad_params = self.curr_grad
-        step_dir = self.curr_step_dir
-        mu = self.curvature_estimator.mu
+        m_0 = self.trust_region.model(objective, 0, params, loss, grad_params)
+        m_p = self.trust_region.model(objective, step_dir, params, loss, grad_params)
 
-        # Correct formula for descent step direction p (g·p < 0)
-        pred_reduction = -0.5 * (mu * param_dot(step_dir, step_dir) - param_dot(step_dir, grad_params))
+        rho = (loss - new_loss) / (m_0 - m_p + eps)
 
-        rho = (self.prev_loss - self.curr_loss) / (pred_reduction + eps)
-        print(f"  prev_loss: {self.prev_loss:.6e}, curr_loss: {self.curr_loss:.6e}")
-        print(f"  curr_step_dir: norm = {param_norm(self.curr_step_dir):.6e}")
-        print(f"  curr_grad: norm = {param_norm(self.curr_grad):.6e}")
-        print(f"  mu: {mu:.6e}")
-        print(f"  lr: {lr:.6e}")
-        print(f"  g_dot_p: {param_dot(self.curr_step_dir, self.curr_grad):.6e}")
-        print(f"  p_norm_sq: {param_dot(self.curr_step_dir, self.curr_step_dir):.6e}")
-        print(f"  pred_reduction: {pred_reduction:.6e}")
-        print(f"  rho: {rho:.6e}")
+        if rho < 0.25:
+            radius = min(radius / self.mu_dec, self.mu_max)
+        elif rho > 0.75:
+            radius *= self.mu_dec
 
-        if rho > 0:
-            super().update()
+        logger.debug(f"[TR] ρ={rho:+.4f}  Δ={radius:8.6f}  loss {loss:.6f} → {new_loss:.6f}")
+
+        return rho, radius
+
+    def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):
+        """
+        Updates the parameters of the network using a direction and a step length.
+
+        Parameters
+        ----------
+
+        lr: float
+        objective: ObjectiveFunction
+        params: Params
+        grad_params: Params
+        """
+
+        prev_loss = objective.loss(*params)
+        model_radius = self.curvature_estimator.mu
+
+        logging.info("Starting trust region loop with radius %g.", model_radius)
+        step_dir = self.get_step_direction(objective, grad_params)
+        if self.fix_ascent and param_dot(grad_params, step_dir) > 0:
+            logger.warning("Ascent direction detected, falling back to steepest descent. ")
+            step_dir = param_neg(grad_params)
+
+        new_params = param_scaled_add(params, step_dir, scale=1)
+
+        with torch.inference_mode():
+            new_loss = objective.loss(*new_params)
+
+        rho, model_radius = self.new_model_radius(objective, model_radius, self.lr_init, prev_loss, params, grad_params, new_loss, step_dir)
+        self.curvature_estimator.mu = model_radius
+
+        logging.info("Finished trust region search, rho = %g, final model radius = %g.", rho, model_radius)
+
+        if (self.prev_params is None and (new_loss < prev_loss)) or rho > self.accept_tol:
+            # Accept new parameters
+            with torch.inference_mode():
+                for param, new_param in zip(params, new_params):
+                    param.copy_(new_param)
+
+            if self.prev_loss is not None:
+                self.delta_loss = new_loss - self.prev_loss
+            self.prev_loss = new_loss
+            self.prev_params = param_detach(new_params)
+            self.prev_step_dir = param_detach(step_dir)
+            self.prev_grad = param_detach(grad_params)
         else:
-            with torch.no_grad():
-                for p, prev_p in zip(self.params, self.prev_params):
-                    p.copy_(prev_p)
+            logging.info("Parameters were not accepted.")
 
-                self.curr_params = param_copy(self.params)
-                self.curr_loss = self.prev_loss
-                self.curr_grad = self.prev_grad
-                self.curr_step_dir = None
+        self.prev_lr_init = self.prev_lr
+        self.prev_lr = torch_to_float(model_radius)
 
-        if rho > 0.75:
-            self.curvature_estimator.mu *= self.mu_dec
-        elif rho < 0.25:
-            self.curvature_estimator.mu /= self.mu_dec
-
-        if self.curvature_estimator.mu >= self.mu_max:
-            self.curvature_estimator.mu = self.mu_max
-
-
-class LevenbergMarquardt(LevenbergMarquardtMixin, NumericalOptimizer):
-    """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
-    and the matlab implementation of 'learnlm' https://es.mathworks.com/help/deeplearning/ref/trainlm.html#d126e69092
-
-    Parameters
-    ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    mu: float
-        Initial value for the coefficient used when adding a diagonal matrix to the Hessian approximation.
-    mu_dec: float
-        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
-    mu_max: float
-        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    use_diagonal: bool
-        Whether to use the diagonal of the Hessian approximation instead of an identity matrix to adjust the Hessian matrix.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
-    """
-
-    def __init__(
-        self,
-        params: Params,
-        lr_init: float = 1.0,
-        lr_method: str | None = None,
-        mu: float = 1e-4,
-        mu_dec: float = 0.1,
-        mu_max: float = 1e10,
-        damping: bool = "fletcher",
-        solver: str = "solve",
-    ):
-        super().__init__(
-            params,
-            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
-            lr_init=lr_init,
-            lr_method=lr_method,
-            solver=solver,
-            mu_dec=mu_dec,
-            mu_max=mu_max,
-            fix_ascent=True,
-        )
-
-
-class LevenbergMarquardtLS(LevenbergMarquardtMixin, LineSearchOptimizer):
-    """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
-    and the matlab implementation of 'learnlm' https://es.mathworks.com/help/deeplearning/ref/trainlm.html#d126e69092
-
-    Parameters
-    ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    mu: float
-        Initial value for the coefficient used when adding a diagonal matrix to the Hessian approximation.
-    mu_dec: float
-        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
-    mu_max: float
-        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    use_diagonal: bool
-        Whether to use the diagonal of the Hessian approximation instead of an identity matrix to adjust the Hessian matrix.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
-    """
-
-    def __init__(
-        self,
-        params: Params,
-        lr_init: float = 1,
-        lr_method: str | None = None,
-        mu: float = 0.001,
-        mu_dec: float = 0.1,
-        mu_max: float = 1e10,
-        damping: str = "fletcher",
-        c1: float = 1e-4,
-        c2: float = 0.9,
-        tau: float = 0.1,
-        max_iter: int = 20,
-        tol: float = 1e-8,
-        line_search_method: str = "backtrack",
-        line_search_cond: str = "armijo",
-        solver: str = "solve",
-    ):
-        super().__init__(
-            params,
-            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
-            lr_init=lr_init,
-            lr_method=lr_method,
-            line_search=create_line_search_solver(
-                method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
-            ),
-            solver=solver,
-            mu_dec=mu_dec,
-            mu_max=mu_max,
-        )
+        if self.reset:
+            self.prev_lr = None
+            self.prev_grad = None
+            self.prev_step_dir = None
+            self.prev_params = None
+            self.prev_loss = None
+            self.delta_loss = None

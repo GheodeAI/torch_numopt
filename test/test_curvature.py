@@ -13,10 +13,10 @@ from torch_numopt.curvature import (
 )
 from torch_numopt.utils import param_flatten, param_reshape_like
 
-
 # ----------------------------------------------------------------------
 # Fixtures
 # ----------------------------------------------------------------------
+
 
 @pytest.fixture
 def linear_model():
@@ -34,13 +34,7 @@ def dataset():
 @pytest.fixture
 def objective(linear_model, dataset):
     X, y = dataset
-    obj = SupervisedLearningObjective(
-        linear_model,
-        nn.MSELoss(),
-        optimizer=None,
-        weight_decay=0,
-        batch_size=None
-    )
+    obj = SupervisedLearningObjective(linear_model, nn.MSELoss(), optimizer=None, weight_decay=0, batch_size=None)
     obj.set_data(X, y)
     return obj
 
@@ -48,13 +42,7 @@ def objective(linear_model, dataset):
 @pytest.fixture
 def batched_objective(linear_model, dataset):
     X, y = dataset
-    obj = SupervisedLearningObjective(
-        linear_model,
-        nn.MSELoss(),
-        optimizer=None,
-        weight_decay=0,
-        batch_size=2
-    )
+    obj = SupervisedLearningObjective(linear_model, nn.MSELoss(), optimizer=None, weight_decay=0, batch_size=2)
     obj.set_data(X, y)
     return obj
 
@@ -67,6 +55,7 @@ def params(objective):
 # ----------------------------------------------------------------------
 # Analytical helpers
 # ----------------------------------------------------------------------
+
 
 def analytical_hessian_linear(X, y):
     N, d = X.shape
@@ -92,8 +81,8 @@ def extract_diagonal_blocks(H, param_shapes):
     blocks = []
     idx = 0
     for shape in param_shapes:
-        size = shape.numel() if hasattr(shape, 'numel') else torch.prod(torch.tensor(shape)).item()
-        block = H[idx:idx+size, idx:idx+size]
+        size = shape.numel() if hasattr(shape, "numel") else torch.prod(torch.tensor(shape)).item()
+        block = H[idx : idx + size, idx : idx + size]
         blocks.append(block)
         idx += size
     return tuple(blocks)
@@ -103,6 +92,7 @@ def extract_diagonal_blocks(H, param_shapes):
 # Tests for NaiveIdentityCalculator
 # ----------------------------------------------------------------------
 
+
 def test_naive_identity_scaling(objective, params):
     est = NaiveIdentityCalculator()
     s = est.scaling_matrix(objective, params)
@@ -111,7 +101,7 @@ def test_naive_identity_scaling(objective, params):
 
 def test_naive_identity_hvp(objective, params):
     est = NaiveIdentityCalculator()
-    v = tuple(torch.randn_like(p) for p in params)   # tuple
+    v = tuple(torch.randn_like(p) for p in params)  # tuple
     hv = est.hvp(objective, params, v)
     for a, b in zip(v, hv):
         torch.testing.assert_close(a, b)
@@ -128,6 +118,7 @@ def test_naive_identity_quadratic(objective, params):
 # ----------------------------------------------------------------------
 # Tests for ExactHessianCalculator (full matrix)
 # ----------------------------------------------------------------------
+
 
 def test_exact_hessian_scaling(objective, params, dataset):
     X, y = dataset
@@ -163,7 +154,7 @@ def test_exact_hessian_quadratic(objective, params, dataset):
 def test_exact_hessian_damping_identity(objective, params, dataset):
     X, y = dataset
     mu = 0.1
-    est = ExactHessianCalculator(damping='identity', mu=mu)
+    est = ExactHessianCalculator(damping="identity", mu=mu)
     H_est = est.scaling_matrix(objective, params)
     H_ref = analytical_hessian_linear(X, y)
     H_ref_damped = H_ref + mu * torch.eye(H_ref.shape[0], device=H_ref.device)
@@ -173,7 +164,7 @@ def test_exact_hessian_damping_identity(objective, params, dataset):
 def test_exact_hessian_damping_fletcher(objective, params, dataset):
     X, y = dataset
     mu = 0.1
-    est = ExactHessianCalculator(damping='fletcher', mu=mu)
+    est = ExactHessianCalculator(damping="fletcher", mu=mu)
     H_est = est.scaling_matrix(objective, params)
     H_ref = analytical_hessian_linear(X, y)
     H_ref_damped = H_ref + mu * torch.diag(H_ref.diagonal())
@@ -183,6 +174,7 @@ def test_exact_hessian_damping_fletcher(objective, params, dataset):
 # ----------------------------------------------------------------------
 # Tests for ExactBlockHessianCalculator (block diagonal)
 # ----------------------------------------------------------------------
+
 
 def test_exact_block_scaling(objective, params, dataset):
     X, y = dataset
@@ -238,7 +230,7 @@ def test_exact_block_quadratic(objective, params, dataset):
 def test_exact_block_damping_identity(objective, params, dataset):
     X, y = dataset
     mu = 0.1
-    est = ExactBlockHessianCalculator(damping='identity', mu=mu)
+    est = ExactBlockHessianCalculator(damping="identity", mu=mu)
     blocks = est.scaling_matrix(objective, params)
 
     H_ref = analytical_hessian_linear(X, y)
@@ -255,6 +247,7 @@ def test_exact_block_damping_identity(objective, params, dataset):
 # Tests for GaussNewtonApproximation (full matrix)
 # ----------------------------------------------------------------------
 
+
 def test_gauss_newton_full_scaling(objective, params, dataset):
     X, y = dataset
     est = GaussNewtonApproximation(damping=None)
@@ -267,7 +260,7 @@ def test_gauss_newton_full_hvp(objective, params, dataset):
     X, y = dataset
     est = GaussNewtonApproximation(damping=None)
     H_ref = analytical_hessian_linear(X, y)
-    v = tuple(torch.randn_like(p) for p in params)   # fixed: tuple
+    v = tuple(torch.randn_like(p) for p in params)  # fixed: tuple
     v_flat = flatten_tensors(v)
     Hv_ref = H_ref @ v_flat
     Hv_est = est.hvp(objective, params, v)
@@ -289,7 +282,7 @@ def test_gauss_newton_full_quadratic(objective, params, dataset):
 def test_gauss_newton_full_damping_identity(objective, params, dataset):
     X, y = dataset
     mu = 0.1
-    est = GaussNewtonApproximation(damping='identity', mu=mu)
+    est = GaussNewtonApproximation(damping="identity", mu=mu)
     H_gn = est.scaling_matrix(objective, params)
     H_ref = analytical_hessian_linear(X, y)
     H_ref_damped = H_ref + mu * torch.eye(H_ref.shape[0], device=H_ref.device)
@@ -299,6 +292,7 @@ def test_gauss_newton_full_damping_identity(objective, params, dataset):
 # ----------------------------------------------------------------------
 # Tests for GaussNewtonBlockApproximation (block diagonal)
 # ----------------------------------------------------------------------
+
 
 def test_gauss_newton_block_scaling(objective, params, dataset):
     X, y = dataset
@@ -323,7 +317,7 @@ def test_gauss_newton_block_hvp(objective, params, dataset):
     blocks = extract_diagonal_blocks(H_ref, param_shapes)
     H_block = block_diag_from_blocks(blocks)
 
-    v = tuple(torch.randn_like(p) for p in params)   # fixed: tuple
+    v = tuple(torch.randn_like(p) for p in params)  # fixed: tuple
     v_flat = flatten_tensors(v)
     Hv_ref = H_block @ v_flat
 
@@ -351,7 +345,7 @@ def test_gauss_newton_block_quadratic(objective, params, dataset):
 def test_gauss_newton_block_damping_identity(objective, params, dataset):
     X, y = dataset
     mu = 0.1
-    est = GaussNewtonBlockApproximation(damping='identity', mu=mu)
+    est = GaussNewtonBlockApproximation(damping="identity", mu=mu)
     blocks = est.scaling_matrix(objective, params)
 
     H_ref = analytical_hessian_linear(X, y)
@@ -367,6 +361,7 @@ def test_gauss_newton_block_damping_identity(objective, params, dataset):
 # Tests for HutchinsonDiagonalApproximation
 # ----------------------------------------------------------------------
 
+
 def test_hutchinson_diagonal_shape(objective, params):
     est = HutchinsonDiagonalApproximation(n_samples=5)
     diag_blocks = est.scaling_matrix(objective, params)
@@ -377,7 +372,7 @@ def test_hutchinson_diagonal_shape(objective, params):
 
 def test_hutchinson_hvp(objective, params):
     est = HutchinsonDiagonalApproximation(n_samples=10)
-    v = tuple(torch.randn_like(p) for p in params)   # fixed: tuple
+    v = tuple(torch.randn_like(p) for p in params)  # fixed: tuple
     diag_blocks = est.scaling_matrix(objective, params)
     hv = est.hvp(objective, params, v)
     for d, hv_, v_ in zip(diag_blocks, hv, v):
@@ -406,6 +401,7 @@ def test_hutchinson_diagonal_against_true_diagonal(objective, params, dataset):
 # ----------------------------------------------------------------------
 # Tests for batched vs non‑batched consistency (these are expected to fail)
 # ----------------------------------------------------------------------
+
 
 def test_exact_hessian_batched_consistency(objective, batched_objective, params):
     est = ExactHessianCalculator(damping=None)

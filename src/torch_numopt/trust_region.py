@@ -31,8 +31,8 @@ def create_trust_region_solver(method, curvature_estimator, solver="solve", **kw
         case "dogleg":
             trust_region_method = DoglegTRSolver(curvature_estimator=curvature_estimator, solver=solver)
         case "exact":
-            print("Using exact trust region solver. Expect extremely long training times.")
-            trust_region_method = ExactTRSolver(curvature_estimator=curvature_estimator, solver=solver, **kwargs)
+            print("Using exact trust region solver. Expect heavy memory use or even OOM exceptions.")
+            trust_region_method = ExactTRSolver(curvature_estimator=curvature_estimator, **kwargs)
         case _:
             tr_methods_str = ", ".join([f"'{i}'" if i is not None else "None" for i in tr_methods])
             last_comma_idx = tr_methods_str.rfind(",")
@@ -66,8 +66,8 @@ class TrustRegionSolver(ABC):
 
 
 class ExactTRSolver(TrustRegionSolver):
-    def __init__(self, curvature_estimator: CurvatureEstimator, solver: str = "solve", iters: int = 20, tol=1e-12):
-        super().__init__(curvature_estimator, solver)
+    def __init__(self, curvature_estimator: CurvatureEstimator, iters: int = 20, tol=1e-12):
+        super().__init__(curvature_estimator)
         self.iters = iters
         self.tol = tol
 
@@ -193,3 +193,5 @@ class DoglegTRSolver(TrustRegionSolver):
         new_params = param_add(params, step_dir)
 
         return new_params, step_dir
+
+# class Seihaug

@@ -2,7 +2,7 @@ from __future__ import annotations
 from ..line_search import create_line_search_solver
 from ..trust_region import create_trust_region_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
-from ..curvature import GaussNewtonBlockApproximation
+from ..curvature import GaussNewtonBlockApproximation, GaussNewtonApproximation
 from ..utils import Params
 
 
@@ -135,12 +135,11 @@ class GaussNewtonTR(TrustRegionOptimizer):
         self,
         params: Params,
         radius_init: float = 1.0,
-        trust_region_method: str = "cauchy",
+        trust_region_method: str = "exact",
         solver: str = "solve",
     ):
         super().__init__(
             params,
-            trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=GaussNewtonBlockApproximation(), solver=solver),
+            trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=GaussNewtonApproximation(), solver=solver),
             radius_init=radius_init,
-            solver=solver,
         )

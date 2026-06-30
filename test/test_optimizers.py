@@ -7,10 +7,10 @@ from torch_numopt.utils import param_dot, param_norm, param_add, param_scalar_pr
 from torch_numopt.line_search import LineSearchSolver
 from torch_numopt.trust_region import TrustRegionSolver
 
-
 # ----------------------------------------------------------------------
 # Helper: Quadratic objective that uses the given parameters
 # ----------------------------------------------------------------------
+
 
 class QuadraticObjective(ObjectiveFunction):
     def __init__(self, A, b, params):
@@ -41,6 +41,7 @@ def make_diag_quadratic(diag_a, b, param):
 # ----------------------------------------------------------------------
 # Fixtures
 # ----------------------------------------------------------------------
+
 
 @pytest.fixture
 def scalar_params():
@@ -76,6 +77,7 @@ def diag_grad(diag_obj):
 # Mock curvature estimators
 # ----------------------------------------------------------------------
 
+
 @pytest.fixture
 def exact_curvature():
     return ExactHessianCalculator(damping=None)
@@ -89,6 +91,7 @@ def naive_curvature():
 # ----------------------------------------------------------------------
 # Mock line search solver
 # ----------------------------------------------------------------------
+
 
 class FixedStepLineSearch(LineSearchSolver):
     def __init__(self, fixed_lr=0.5):
@@ -104,6 +107,7 @@ class FixedStepLineSearch(LineSearchSolver):
 # ----------------------------------------------------------------------
 # Mock trust region solver
 # ----------------------------------------------------------------------
+
 
 class FixedStepTrustRegion(TrustRegionSolver):
     def __init__(self, curvature_estimator, step_dir=None):
@@ -125,14 +129,9 @@ class FixedStepTrustRegion(TrustRegionSolver):
 # Tests for NumericalOptimizer
 # ----------------------------------------------------------------------
 
+
 def test_initialize_lr_methods(scalar_obj, scalar_params, scalar_grad, exact_curvature):
-    opt = NumericalOptimizer(
-        params=scalar_params,
-        curvature_estimator=exact_curvature,
-        lr_init=1.0,
-        lr_method=None,
-        fix_ascent=True
-    )
+    opt = NumericalOptimizer(params=scalar_params, curvature_estimator=exact_curvature, lr_init=1.0, lr_method=None, fix_ascent=True)
     # Set previous values with non‑zero loss change
     prev_lr = 0.5
     prev_grad = (torch.tensor([-4.0], dtype=torch.float64),)
@@ -148,13 +147,7 @@ def test_initialize_lr_methods(scalar_obj, scalar_params, scalar_grad, exact_cur
     methods = [None, "keep", "scaled", "lipschitz", "BB1", "BB2", "quadratic"]
     for method in methods:
         opt.lr_method = method
-        lr = opt.initialize_lr(
-            lr=1.0,
-            grad_params=scalar_grad,
-            step_dir=step_dir,
-            objective=scalar_obj,
-            params=scalar_params
-        )
+        lr = opt.initialize_lr(lr=1.0, grad_params=scalar_grad, step_dir=step_dir, objective=scalar_obj, params=scalar_params)
         assert lr > 0, f"Method {method} returned non‑positive lr"
 
     with pytest.raises(ValueError):
@@ -164,12 +157,7 @@ def test_initialize_lr_methods(scalar_obj, scalar_params, scalar_grad, exact_cur
 
 def test_get_step_direction_returns_step(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     """Just verify that get_step_direction returns a non‑None step."""
-    opt = NumericalOptimizer(
-        params=scalar_params,
-        curvature_estimator=exact_curvature,
-        lr_init=1.0,
-        fix_ascent=True
-    )
+    opt = NumericalOptimizer(params=scalar_params, curvature_estimator=exact_curvature, lr_init=1.0, fix_ascent=True)
     step = opt.get_step_direction(scalar_obj, scalar_grad)
     assert step is not None
 
@@ -184,13 +172,7 @@ def test_get_step_direction_returns_step(scalar_obj, scalar_params, scalar_grad,
 
 
 def test_apply_gradients_and_update(scalar_obj, scalar_params, scalar_grad, exact_curvature):
-    opt = NumericalOptimizer(
-        params=scalar_params,
-        curvature_estimator=exact_curvature,
-        lr_init=1.0,
-        lr_method="keep",
-        fix_ascent=True
-    )
+    opt = NumericalOptimizer(params=scalar_params, curvature_estimator=exact_curvature, lr_init=1.0, lr_method="keep", fix_ascent=True)
     opt.prev_lr = 0.5
     opt.prev_step_dir = (torch.tensor([1.0], dtype=torch.float64),)
     opt.prev_grad = (torch.tensor([-2.0], dtype=torch.float64),)
@@ -205,7 +187,7 @@ def test_apply_gradients_and_update(scalar_obj, scalar_params, scalar_grad, exac
     assert opt.curr_params is not None
     assert opt.curr_grad is not None
 
-    opt.update()
+    opt.update_params()
     assert opt.prev_lr == 0.5
     assert opt.prev_loss == loss_new
     assert opt.prev_params is not None
@@ -216,15 +198,10 @@ def test_step_full_iteration(scalar_obj, scalar_params, scalar_grad, exact_curva
     class DummyOptimizer:
         def zero_grad(self):
             pass
+
     scalar_obj.optimizer = DummyOptimizer()
 
-    opt = NumericalOptimizer(
-        params=scalar_params,
-        curvature_estimator=exact_curvature,
-        lr_init=1.0,
-        lr_method="keep",
-        fix_ascent=True
-    )
+    opt = NumericalOptimizer(params=scalar_params, curvature_estimator=exact_curvature, lr_init=1.0, lr_method="keep", fix_ascent=True)
     opt.prev_lr = 0.5
     opt.prev_step_dir = (torch.tensor([1.0], dtype=torch.float64),)
     opt.prev_grad = scalar_grad
@@ -242,16 +219,11 @@ def test_step_full_iteration(scalar_obj, scalar_params, scalar_grad, exact_curva
 # Tests for LineSearchOptimizer
 # ----------------------------------------------------------------------
 
+
 def test_line_search_optimizer_uses_line_search(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     fixed_lr = 0.2
     ls = FixedStepLineSearch(fixed_lr=fixed_lr)
-    opt = LineSearchOptimizer(
-        params=scalar_params,
-        curvature_estimator=exact_curvature,
-        line_search=ls,
-        lr_init=1.0,
-        lr_method="keep"
-    )
+    opt = LineSearchOptimizer(params=scalar_params, curvature_estimator=exact_curvature, line_search=ls, lr_init=1.0, lr_method="keep")
     opt.prev_lr = 0.5
     opt.prev_step_dir = (torch.tensor([1.0], dtype=torch.float64),)
     opt.prev_grad = (torch.tensor([-2.0], dtype=torch.float64),)
@@ -275,16 +247,12 @@ def test_line_search_optimizer_step_calls_line_search(scalar_obj, scalar_params,
             return super().line_search(params, step_dir, grad_params, lr_init, objective)
 
     ls = RecordingLineSearch()
-    opt = LineSearchOptimizer(
-        params=scalar_params,
-        curvature_estimator=exact_curvature,
-        line_search=ls,
-        lr_init=1.0,
-        lr_method=None
-    )
+    opt = LineSearchOptimizer(params=scalar_params, curvature_estimator=exact_curvature, line_search=ls, lr_init=1.0, lr_method=None)
+
     class DummyOpt:
         def zero_grad(self):
             pass
+
     scalar_obj.optimizer = DummyOpt()
 
     opt.step(scalar_obj)
@@ -295,19 +263,14 @@ def test_line_search_optimizer_step_calls_line_search(scalar_obj, scalar_params,
 # TrustRegionOptimizer tests
 # ----------------------------------------------------------------------
 
+
 def test_trust_region_optimizer_increases_radius(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     """Radius should increase when rho>0.75 and step is on the boundary."""
     # Step norm = 1.0 (boundary) with radius = 1.0
     expected_step = (torch.tensor([1.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=exact_curvature, step_dir=expected_step)
 
-    opt = TrustRegionOptimizer(
-        params=scalar_params,
-        trust_region=tr,
-        radius_init=10.0,      # cap for increase
-        accept_tol=0.1,
-        solver="solve"
-    )
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=10.0, accept_tol=0.1, solver="solve")  # cap for increase
     opt.curvature_estimator = exact_curvature
     # Set previous radius to 1.0 (so current radius is 1.0)
     opt.prev_lr = 1.0
@@ -327,13 +290,7 @@ def test_trust_region_optimizer_decreases_radius(scalar_obj, scalar_params, scal
     bad_step = (torch.tensor([5.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=naive_curvature, step_dir=bad_step)
 
-    opt = TrustRegionOptimizer(
-        params=scalar_params,
-        trust_region=tr,
-        radius_init=2.0,
-        accept_tol=0.1,
-        solver="solve"
-    )
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=2.0, accept_tol=0.1, solver="solve")
     opt.curvature_estimator = naive_curvature
     # Set previous radius to 2.0 (same as init)
     opt.prev_lr = 2.0
@@ -352,13 +309,7 @@ def test_trust_region_accepts_good_step(scalar_obj, scalar_params, scalar_grad, 
     """A step with rho>accept_tol should be accepted."""
     good_step = (torch.tensor([1.0], dtype=torch.float64),)  # gives decrease
     tr = FixedStepTrustRegion(curvature_estimator=exact_curvature, step_dir=good_step)
-    opt = TrustRegionOptimizer(
-        params=scalar_params,
-        trust_region=tr,
-        radius_init=1.0,
-        accept_tol=0.1,
-        solver="solve"
-    )
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1, solver="solve")
     opt.curvature_estimator = exact_curvature
     # Reset params to zero
     with torch.no_grad():
@@ -378,13 +329,7 @@ def test_trust_region_rejects_bad_step(scalar_obj, scalar_params, scalar_grad, n
     # Use a bad step that causes loss increase but model predicts decrease
     bad_step = (torch.tensor([5.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=naive_curvature, step_dir=bad_step)
-    opt = TrustRegionOptimizer(
-        params=scalar_params,
-        trust_region=tr,
-        radius_init=1.0,
-        accept_tol=0.1,
-        solver="solve"
-    )
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1, solver="solve")
     opt.curvature_estimator = naive_curvature
     # Reset params to zero
     with torch.no_grad():

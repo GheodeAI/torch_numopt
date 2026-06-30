@@ -148,7 +148,7 @@ class LBFGSLS(LBFGSMixin, LineSearchOptimizer):
 
     def __init__(
         self,
-        model: nn.Module,
+        params: Params,
         lr_init: float = 1,
         lr_method: str = None,
         c1: float = 1e-4,
@@ -157,13 +157,13 @@ class LBFGSLS(LBFGSMixin, LineSearchOptimizer):
         max_iter: int = 20,
         tol: float = 1e-8,
         memory_size: int = 10,
-        line_search_method: str = "backtrack",
-        line_search_cond: str = "armijo",
+        line_search_method: str = "interpolat",
+        line_search_cond: str = "wolfe",
     ):
 
         super().__init__(
-            model,
-            curvature_estimator=NaiveIdentityCalculator(model=model),
+            params,
+            curvature_estimator=NaiveIdentityCalculator(),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(

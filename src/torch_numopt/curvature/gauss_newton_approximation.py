@@ -109,7 +109,7 @@ class GaussNewtonApproximation(CurvatureEstimator):
 
         return h_params
 
-    def _jvp(self, objective, params, step_dir):
+    def jvp(self, objective, params, step_dir):
         if not objective.batched:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug("Computing the Jacobian vector product.")
@@ -179,7 +179,7 @@ class GaussNewtonApproximation(CurvatureEstimator):
         return hess_approx
 
     def quadratic_form(self, objective, params, grad_params: Params) -> Params:
-        Jp = self._jvp(objective, params, grad_params)
+        Jp = self.jvp(objective, params, grad_params)
         quadratic_form = param_dot(Jp, Jp)
         if objective.reduction == "mean":
             quadratic_form = quadratic_form * 2 / objective.data_size

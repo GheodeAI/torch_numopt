@@ -307,5 +307,10 @@ def param_numel(params: Params) -> int:
 
     return sum(p.numel() for p in params)
 
+
+def param_detach(params: Params) -> Params:
+    return tuple(p.detach().clone() for p in params)
+
+
 def param_argnums(params: Params) -> tuple:
     return tuple(range(len(params)))

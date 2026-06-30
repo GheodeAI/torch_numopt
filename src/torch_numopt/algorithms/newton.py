@@ -5,6 +5,7 @@ from ..trust_region import create_trust_region_solver
 from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
 from ..curvature import ExactBlockHessianCalculator, ExactHessianCalculator
 from ..utils import Params
+from ..solve_system import iterative_solver_set
 
 
 class Newton(NumericalOptimizer):
@@ -52,10 +53,16 @@ class Newton(NumericalOptimizer):
         damping: str = None,
         mu: float = 1,
         solver: str = "solve",
+        block_hessian: bool = True,
     ):
+        if block_hessian:
+            curvature_estimator = ExactBlockHessianCalculator(damping=damping, mu=mu)
+        else:
+            curvature_estimator = ExactHessianCalculator(damping=damping, mu=mu)
+
         super().__init__(
             params,
-            curvature_estimator=ExactBlockHessianCalculator(damping=damping, mu=mu),
+            curvature_estimator=curvature_estimator,
             lr_init=lr_init,
             lr_method=lr_method,
             solver=solver,
@@ -114,10 +121,16 @@ class NewtonLS(LineSearchOptimizer):
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         solver: str = "solve",
+        block_hessian: bool = True,
     ):
+        if block_hessian:
+            curvature_estimator = ExactBlockHessianCalculator(damping=damping, mu=mu)
+        else:
+            curvature_estimator = ExactHessianCalculator(damping=damping, mu=mu)
+
         super().__init__(
             params,
-            curvature_estimator=ExactBlockHessianCalculator(damping=damping, mu=mu),
+            curvature_estimator=curvature_estimator,
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
@@ -168,18 +181,24 @@ class NewtonTR(TrustRegionOptimizer):
         self,
         params: Params,
         radius_init: float = 1.0,
-        trust_region_method: str = "cauchy",
+        trust_region_method: str = "exact",
         damping: str = None,
         mu: float = 1,
         solver: str = "solve",
+        block_hessian: bool = False,
     ):
+        if block_hessian:
+            curvature_estimator = ExactBlockHessianCalculator(damping=damping, mu=mu)
+        else:
+            curvature_estimator = ExactHessianCalculator(damping=damping, mu=mu)
+
         super().__init__(
             params,
             trust_region=create_trust_region_solver(
-                method=trust_region_method, curvature_estimator=ExactBlockHessianCalculator(damping=damping, mu=mu), solver=solver
+                method=trust_region_method, curvature_estimator=curvature_estimator, solver=solver
             ),
+            curvature_estimator=curvature_estimator,
             radius_init=radius_init,
-            solver=solver,
         )
 
 
@@ -227,13 +246,16 @@ class NewtonCG(NumericalOptimizer):
         lr_method: str | None = None,
         damping: str = None,
         mu: float = 1,
+        solver="cg-trunc"
     ):
+        assert solver in iterative_solver_set, "``NewtonCG`` does not accept direct solvers. Consider using the ``Newton`` optimizer."
+
         super().__init__(
             params,
             curvature_estimator=ExactHessianCalculator(damping=damping, mu=mu),
             lr_init=lr_init,
             lr_method=lr_method,
-            solver="cg-trunc",
+            solver=solver,
         )
 
 
@@ -288,7 +310,10 @@ class NewtonCGLS(LineSearchOptimizer):
         mu: float = 1,
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
+        solver="cg-trunc"
     ):
+        assert solver in iterative_solver_set, "``NewtonCG`` does not accept direct solvers. Consider using the ``Newton`` optimizer."
+
         super().__init__(
             params,
             curvature_estimator=ExactHessianCalculator(damping=damping, mu=mu),
@@ -297,5 +322,5 @@ class NewtonCGLS(LineSearchOptimizer):
             line_search=create_line_search_solver(
                 method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
             ),
-            solver="cg-trunc",
+            solver=solver,
         )

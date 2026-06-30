@@ -21,7 +21,6 @@ class AdaHessianMixin:
         self.eps = eps
         self.skip_iters = skip_iters
 
-    # def get_step_direction(self, params, grad_params):
     def get_step_direction(self, objective, grad_params):
         """ """
         h_params = self.curvature_estimator.scaling_matrix(objective, objective.params)

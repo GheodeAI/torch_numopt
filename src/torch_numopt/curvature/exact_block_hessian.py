@@ -103,7 +103,7 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
             zero_vector = tuple(torch.zeros_like(p) for p in params)
             hess_dot_step = [None] * len(params)
             for i, s_d in enumerate(step_dir):
-                block_step_dir = zero_vector[:i] + (s_d,) + zero_vector[i+1:]
+                block_step_dir = zero_vector[:i] + (s_d,) + zero_vector[i + 1 :]
                 _, hess_dot_step_block = torch.autograd.functional.vhp(objective.loss, params, v=block_step_dir)
                 hess_dot_step[i] = hess_dot_step_block[i]
             hess_dot_step = tuple(hess_dot_step)
@@ -115,11 +115,11 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
             #     if torch.all(s == 0):
             #         hess_dot_step.append(torch.zeros_like(p))
             #         continue
-                    
+
             #     grad_dot_s = param_dot(g, s)
             #     hvp_i = torch.autograd.grad(grad_dot_s, p, retain_graph=True, create_graph=False)[0]
             #     hess_dot_step[i] = hvp_i
-            
+
             # hess_dot_step = tuple(hess_dot_step)
         else:
             if logger.isEnabledFor(logging.DEBUG):
@@ -133,7 +133,7 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
                 hess_dot_step_batch = [None] * len(params)
                 for i, (p, s_d) in enumerate(zip(params, step_dir)):
                     grad_fn = torch.func.grad(batched_loss, argnums=i)
-                    tangents = zero_params[:i] + (s_d,) + zero_params[i+1:]
+                    tangents = zero_params[:i] + (s_d,) + zero_params[i + 1 :]
                     _, hess_dot_step_p = torch.func.jvp(grad_fn, params, tuple(tangents))
                     hess_dot_step_batch[i] = hess_dot_step_p
                 hess_dot_step_batch = tuple(hess_dot_step_batch)

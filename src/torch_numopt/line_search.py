@@ -260,13 +260,14 @@ class InterpolationLineSearch(LineSearchSolver):
             and lr_1 >= self.tol
         ):
             factor = 1 / ((lr_0 * lr_1) ** 2 * (lr_1 - lr_0) + eps)
-            aux_mat = torch.tensor([[lr_0**2, -(lr_1**2)], [-(lr_0**3), lr_1**3]], device=device)
+            aux_mat = torch.tensor([[lr_0**2, -(lr_1**2)], [-(lr_0**3), lr_1**3]], device=device, dtype=dtype)
             aux_vec = torch.tensor(
                 [
                     new_loss - loss - dir_deriv * lr_1,
                     prev_loss - loss - dir_deriv * lr_0,
                 ],
                 device=device,
+                dtype=dtype,
             )
             a, b = factor * torch.matmul(aux_mat, aux_vec)
 
