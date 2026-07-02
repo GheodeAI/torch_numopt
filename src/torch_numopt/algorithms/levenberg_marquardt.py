@@ -61,7 +61,7 @@ class LevenbergMarquardt(TrustRegionOptimizer):
         mu: float = 1e-2,
         mu_dec: float = 0.1,
         mu_max: float = 1e10,
-        accept_tol = 0,
+        accept_tol=0,
         damping: str = "fletcher",
         solver: str = "cholesky",
     ):

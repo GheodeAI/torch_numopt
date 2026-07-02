@@ -157,7 +157,7 @@ class LBFGSLS(LBFGSMixin, LineSearchOptimizer):
         max_iter: int = 20,
         tol: float = 1e-8,
         memory_size: int = 10,
-        line_search_method: str = "interpolat",
+        line_search_method: str = "interpolate",
         line_search_cond: str = "wolfe",
     ):
 

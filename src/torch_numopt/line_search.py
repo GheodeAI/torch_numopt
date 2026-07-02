@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import logging
 import torch
 from .objective import ObjectiveFunction
-from .utils import param_scaled_add, param_dot, param_is_finite, param_neg, Params
+from .utils import param_scaled_add, param_dot, param_is_finite, param_neg, torch_to_float, Params
 
 logger = logging.getLogger(__name__)
 
@@ -296,44 +296,52 @@ class InterpolationLineSearch(LineSearchSolver):
 class BisectionLineSearch(LineSearchSolver):
     @torch.enable_grad()
     def line_search(self, params, step_dir, grad_params, lr_init, objective):
-        lr = lr_init
+        loss = objective.loss(*params)
         a_min = 0
-        a_max = lr
+        a_max = lr_init
+            
+        lr = a_max
+        new_params = param_scaled_add(params, step_dir, scale=lr)
+        new_loss = objective.loss(*new_params)
+        new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=True)
+        new_dir_deriv = param_dot(new_grad, step_dir)
 
-        # new_params = param_scaled_add(params, step_dir, scale=lr)
+        if self.accept_step(params, new_params, step_dir, lr, loss, new_loss, grad_params):
+            if logger.isEnabledFor(logging.INFO):
+                logger.info("Accepted initial lr = %g.", lr)
+            return new_params, lr
 
-        # new_loss = objective.loss(*new_params)
-        # new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=False)
-        # new_dir_deriv = param_dot(new_grad, step_dir)
-
-        # new_loss = objective.loss(*new_params)
-        # new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=False)
-        # new_dir_deriv = param_dot(new_grad, step_dir)
-
-        logger.info("Starting bisection line search with initial guess of %g with loss of %g.", lr, new_loss)
-
+        if new_dir_deriv > 0:
+            a_max = lr
+        else:
+            a_min = lr
+        
         n_iters = 0
-        while n_iters < self.max_iter and torch.abs(new_dir_deriv) >= self.tol and a_max != a_min:
+        for _ in range(self.max_iter):
             lr = 0.5 * (a_max + a_min)
-
-            if new_dir_deriv < 0:
-                a_max = lr
-            elif new_dir_deriv > 0:
-                a_min = lr
-
             new_params = param_scaled_add(params, step_dir, scale=lr)
             new_loss = objective.loss(*new_params)
-
-            logger.debug("Iteration %d, new guess is %g which yielded a loss of %g.", n_iters, lr, new_loss)
-
-            new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=False)
+            new_grad = torch.autograd.grad(new_loss, new_params, create_graph=False, retain_graph=True)
             new_dir_deriv = param_dot(new_grad, step_dir)
+
+            if self.accept_step(params, new_params, step_dir, lr, loss, new_loss, grad_params):
+                break
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Iteration %d, new guess is %g which yielded a loss of %g.", n_iters, torch_to_float(lr), torch_to_float(new_loss))
+
+            if new_dir_deriv > 0:
+                a_max = lr
+            else:
+                a_min = lr
+            
+            if a_max - a_min <= self.tol:
+                break
+            
             n_iters += 1
 
-        if n_iters >= self.max_iter:
-            logger.debug("Exceeded the maximum number of line search iterations.")
-
-        logger.info("Settled into lr = %g.", lr)
+        if logger.isEnabledFor(logging.INFO):
+            logger.info("Settled into lr = %g.", lr)
 
         self.n_iters_ = n_iters
         self.new_lr_ = float(lr)

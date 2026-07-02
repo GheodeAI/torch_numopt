@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 import logging
 import torch
+
+from torch_numopt.utils.param_operations import param_zero_like
 from .utils import (
     param_scaled_add,
     param_norm,
@@ -33,6 +35,8 @@ def create_trust_region_solver(method, curvature_estimator, solver="solve", **kw
         case "exact":
             print("Using exact trust region solver. Expect heavy memory use or even OOM exceptions.")
             trust_region_method = ExactTRSolver(curvature_estimator=curvature_estimator, **kwargs)
+        case "steihaug-toint":
+            trust_region_method = SteihaugTointTRSolver(curvature_estimator=curvature_estimator, **kwargs)
         case _:
             tr_methods_str = ", ".join([f"'{i}'" if i is not None else "None" for i in tr_methods])
             last_comma_idx = tr_methods_str.rfind(",")
@@ -82,14 +86,13 @@ class ExactTRSolver(TrustRegionSolver):
             p_norm = torch.linalg.norm(p)
             if p_norm - radius <= self.tol:
                 step_dir = param_reshape_like(p, params)
-                new_params = param_add(params, step_dir)
 
                 # DEBUG
                 if logger.isEnabledFor(logging.DEBUG):
                     gdotp = torch.dot(grad_flat, p).item()
                     model_red = -gdotp - 0.5 * self.curvature_estimator.quadratic_form(objective, params, param_reshape_like(-p, params)).item()
                     logger.debug(f"[TR] λ={next_lambda:9.4f}  ||p||={p_norm:7.5f}  gᵀp={gdotp:+8.5f}  Δm={model_red:+8.5f}")
-                return new_params, step_dir
+                return step_dir
 
             q = torch.linalg.solve_triangular(L, p.unsqueeze(-1), upper=False).squeeze(-1)
             q_norm = torch.linalg.norm(q)
@@ -119,7 +122,6 @@ class ExactTRSolver(TrustRegionSolver):
             next_lambda = next_lambda + (p_norm / q_norm) ** 2 * (p_norm - radius) / radius
 
         step_dir = param_reshape_like(p, params)
-        new_params = param_add(params, step_dir)
 
         # DEBUG
         if logger.isEnabledFor(logging.DEBUG):
@@ -128,7 +130,7 @@ class ExactTRSolver(TrustRegionSolver):
             model_red = -gdotp - 0.5 * self.curvature_estimator.quadratic_form(objective, params, param_reshape_like(-p, params)).item()
             logger.debug(f"[TR] λ={next_lambda:9.4f}  ||p||={p_norm:7.5f}  gᵀp={gdotp:+8.5f}  Δm={model_red:+8.5f}")
 
-        return new_params, step_dir
+        return step_dir
 
 
 class CauchyPointTRSolver(TrustRegionSolver):
@@ -145,9 +147,8 @@ class CauchyPointTRSolver(TrustRegionSolver):
 
         scaling = tau * radius / (grad_norm + eps)
         step_dir = param_scalar_prod(-scaling, grad_params)
-        new_params = param_add(params, step_dir)
 
-        return new_params, step_dir
+        return step_dir
 
 
 class DoglegTRSolver(TrustRegionSolver):
@@ -160,8 +161,7 @@ class DoglegTRSolver(TrustRegionSolver):
         if g_B_g <= 0:
             scaling = radius / (torch.sqrt(grad_norm_sq) + eps)
             step_dir = param_scalar_prod(-scaling, grad_params)
-            new_params = param_add(params, step_dir)
-            return new_params, step_dir
+            return step_dir
 
         grad_scale = grad_norm_sq / (g_B_g + eps)
         psd = param_scalar_prod(-grad_scale, grad_params)
@@ -169,8 +169,7 @@ class DoglegTRSolver(TrustRegionSolver):
 
         if norm_psd >= radius:
             step_dir = param_scalar_prod(radius / norm_psd, psd)
-            new_params = param_add(params, step_dir)
-            return new_params, step_dir
+            return step_dir
 
         pgn = solve_system(self.curvature_estimator, objective, grad_params, solver=self.solver)
         pgn = param_neg(pgn)
@@ -178,8 +177,7 @@ class DoglegTRSolver(TrustRegionSolver):
         norm_pgn = param_norm(pgn)
         if norm_pgn <= radius:
             step_dir = pgn
-            new_params = param_add(params, step_dir)
-            return new_params, step_dir
+            return step_dir
 
         a = psd
         b = param_diff(pgn, psd)
@@ -190,8 +188,60 @@ class DoglegTRSolver(TrustRegionSolver):
         t = (-ab + torch.sqrt(ab * ab - bb * c)) / (bb + eps)
 
         step_dir = param_scaled_add(a, b, scale=t)
-        new_params = param_add(params, step_dir)
+        return step_dir
 
-        return new_params, step_dir
 
-# class Seihaug
+class SteihaugTointTRSolver(TrustRegionSolver):
+    def __init__(self, curvature_estimator: CurvatureEstimator, max_iter=20, atol=1e-8, tol=1e-4, min_iter=2):
+        super().__init__(curvature_estimator)
+        self.max_iter = max_iter
+        self.atol = atol
+        self.tol = tol
+        self.min_iter = min_iter
+
+    def optimize_model(self, objective, params, radius, grad_params):
+        eps = torch.finfo(grad_params[0].dtype).eps
+        rad_sq = radius * radius
+
+        z = param_zero_like(grad_params)
+        r = grad_params
+        d = param_neg(r)
+        r_sq_old = param_dot(r, r)
+
+        grad_norm = torch.sqrt(r_sq_old)
+        effective_tol = max(self.atol, self.tol * grad_norm)
+        if grad_norm < effective_tol:
+            return z
+
+        for i in range(self.max_iter):
+            Bd = self.curvature_estimator.hvp(objective, params, d)
+            dBd = param_dot(d, Bd)
+            z_old = z
+            if dBd <= 0:
+                d_sq = param_dot(d, d)
+                aux1 = param_dot(d, z_old) / d_sq
+                aux2 = (rad_sq - param_dot(z_old, z_old)) / d_sq
+                tau = -aux1 + torch.sqrt(torch.clamp(aux1 * aux1 + aux2, min=0))
+                new_p = param_scaled_add(z_old, d, scale=tau)
+                return new_p
+
+            alpha = r_sq_old / (dBd + eps)
+            z = param_scaled_add(z, d, scale=alpha)
+            if param_dot(z, z) >= rad_sq:
+                d_sq = param_dot(d, d)
+                aux1 = param_dot(d, z_old) / d_sq
+                aux2 = (rad_sq - param_dot(z_old, z_old)) / d_sq
+                tau = -aux1 + torch.sqrt(torch.clamp(aux1 * aux1 + aux2, min=0))
+                new_p = param_scaled_add(z_old, d, scale=tau)
+                return new_p
+
+            r = param_scaled_add(r, Bd, scale=alpha)
+            r_sq_new = param_dot(r, r)
+            if torch.sqrt(r_sq_new) < effective_tol and i >= self.min_iter:
+                return z
+
+            beta = r_sq_new / r_sq_old
+            d = param_scaled_add(param_neg(r), d, scale=beta)
+            r_sq_old = r_sq_new
+
+        return z

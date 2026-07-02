@@ -6,6 +6,8 @@ import logging
 import torch
 from torch.optim import Optimizer
 
+from torch_numopt.utils.param_operations import param_add
+
 from .utils import param_diff, param_scalar_prod, param_dot, param_neg, param_norm, param_scaled_add, param_copy, param_detach, Params, torch_to_float
 from .line_search import LineSearchSolver
 from .trust_region import TrustRegionSolver
@@ -130,8 +132,7 @@ class NumericalOptimizer(Optimizer, ABC):
         return new_lr
 
     def get_step_direction(self, objective, grad_params):
-        step_direction = solve_system(self.curvature_estimator, objective, grad_params, solver=self.solver)
-        return param_neg(step_direction)
+        return solve_system(self.curvature_estimator, objective, param_neg(grad_params), solver=self.solver)
 
     def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):
         """
@@ -341,7 +342,11 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         model_radius = self.lr_init if self.prev_lr is None else self.prev_lr
 
         logging.info("Starting trust region loop with radius %g.", model_radius)
-        new_params, step_dir = self.trust_region.optimize_model(objective, params, model_radius, grad_params)
+        step_dir = self.trust_region.optimize_model(objective, params, model_radius, grad_params)
+        if self.fix_ascent and param_dot(grad_params, step_dir) > 1e-8:
+            logger.warning("Ascent direction detected, falling back to steepest descent. ")
+            step_dir = param_neg(grad_params)
+        new_params = param_add(params, step_dir)
 
         with torch.inference_mode():
             new_loss = objective.loss(*new_params)
