@@ -1,3 +1,10 @@
+"""
+Block-diagonal Gauss-Newton approximation.
+
+Similar to the full Gauss-Newton, but only the diagonal blocks of Jᵀ J are
+computed, one per parameter group. This saves memory and is often sufficient.
+"""
+
 from __future__ import annotations
 from typing import Optional
 import logging
@@ -11,6 +18,23 @@ logger = logging.getLogger(__name__)
 
 
 class GaussNewtonBlockApproximation(CurvatureEstimator):
+    """
+    Block-diagonal Gauss-Newton Hessian approximation.
+
+    Each block is formed as J_iᵀ J_i, where J_i is the Jacobian of the residual
+    with respect to the i-th parameter group. Cross-group derivatives are
+    ignored.
+
+    Parameters
+    ----------
+    vectorize : bool, default=True
+        Use vectorized Jacobian computation.
+    damping : str or None, default=None
+        Damping strategy.
+    mu : float, default=1e-4
+        Damping coefficient.
+    """
+
     def __init__(
         self,
         vectorize: bool = True,

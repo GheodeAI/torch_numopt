@@ -1,3 +1,11 @@
+"""
+Gauss-Newton approximation of the Hessian.
+
+For least-squares problems, the Gauss-Newton method approximates the Hessian as
+Jᵀ J, where J is the Jacobian of the residuals. This module provides both full
+and block-diagonal versions.
+"""
+
 from __future__ import annotations
 from typing import Optional
 import logging
@@ -11,6 +19,23 @@ logger = logging.getLogger(__name__)
 
 
 class GaussNewtonApproximation(CurvatureEstimator):
+    """
+    Full Gauss-Newton Hessian approximation.
+
+    The matrix is computed as Jᵀ J, where J is the Jacobian of the residual
+    vector with respect to the parameters. This estimator forms a single dense
+    matrix.
+
+    Parameters
+    ----------
+    vectorize : bool, default=True
+        If ``True``, use vectorized Jacobian computation (may be faster).
+    damping : str or None, default=None
+        Damping strategy (identity or Fletcher).
+    mu : float, default=1e-4
+        Damping coefficient.
+    """
+
     def __init__(
         self,
         vectorize: bool = True,

@@ -7,7 +7,7 @@ from ..curvature import HutchinsonDiagonalApproximation
 
 
 class AdaHessianMixin:
-    def __init__(self, *args, beta1=0.9, beta2=0.999, k: float = 1, eps: float = 1e-4, skip_iters: int = 0, **kwargs):
+    def __init__(self, *args, beta1=0.9, beta2=0.999, k: float = 1, eps: float = 1e-4, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.beta1 = beta1
@@ -19,7 +19,6 @@ class AdaHessianMixin:
         self.prev_hess_moment = 0
         self.k = k
         self.eps = eps
-        self.skip_iters = skip_iters
 
     def get_step_direction(self, objective, grad_params):
         """ """
@@ -48,30 +47,6 @@ class AdaHessianMixin:
 
 
 class AdaHessian(AdaHessianMixin, NumericalOptimizer):
-    """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
-
-    Parameters
-    ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    """
-
     def __init__(
         self,
         params: Params,
@@ -81,8 +56,7 @@ class AdaHessian(AdaHessianMixin, NumericalOptimizer):
         beta2=0.999,
         k: float = 1,
         eps: float = 1e-4,
-        skip_iters: int = 0,
-        n_samples: int = 1,
+        n_samples: int = 5,
     ):
         super().__init__(
             params,
@@ -93,36 +67,11 @@ class AdaHessian(AdaHessianMixin, NumericalOptimizer):
             beta2=beta2,
             k=k,
             eps=eps,
-            skip_iters=skip_iters,
             fix_ascent=False,
         )
 
 
 class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
-    """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
-
-    Parameters
-    ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    """
-
     def __init__(
         self,
         params: Params,
@@ -130,20 +79,20 @@ class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
         lr_method: str | None = None,
         beta1=0.9,
         beta2=0.999,
+        k: float = 1,
+        eps: float = 1e-4,
+        n_samples: int = 5,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
         max_iter: int = 20,
         tol: float = 1e-8,
-        k: float = 1,
-        eps: float = 1e-4,
-        skip_iters: int = 0,
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
     ):
         super().__init__(
             params,
-            curvature_estimator=HutchinsonDiagonalApproximation(n_samples=1),
+            curvature_estimator=HutchinsonDiagonalApproximation(n_samples=n_samples),
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
@@ -153,5 +102,5 @@ class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
             beta2=beta2,
             k=k,
             eps=eps,
-            skip_iters=skip_iters,
+            n_samples=n_samples,
         )

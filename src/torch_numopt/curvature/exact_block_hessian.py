@@ -1,3 +1,11 @@
+"""
+Block-diagonal exact Hessian.
+
+Instead of computing the full Hessian matrix, this estimator computes only the
+diagonal blocks (one per parameter group), ignoring cross-group second
+derivatives. This reduces memory and computational cost.
+"""
+
 from __future__ import annotations
 from typing import Optional
 import logging
@@ -13,7 +21,18 @@ logger = logging.getLogger(__name__)
 
 class ExactBlockHessianCalculator(CurvatureEstimator):
     """
-    Approximates the hessian in blocks, only taking the inner-layer second derivatives.
+    Exact Hessian approximated as a block-diagonal matrix.
+
+    Each block corresponds to a single parameter tensor (e.g., a weight matrix).
+    This is often sufficient for many optimization problems and is cheaper than
+    the full Hessian.
+
+    Parameters
+    ----------
+    damping : str or None, default=None
+        Damping strategy (see :class:`ExactHessianCalculator`).
+    mu : float, default=1e-4
+        Damping coefficient.
     """
 
     def __init__(
@@ -108,19 +127,6 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
                 hess_dot_step[i] = hess_dot_step_block[i]
             hess_dot_step = tuple(hess_dot_step)
 
-            # loss = objective.loss(*params)
-            # grad = torch.autograd.grad(loss, params, create_graph=True, retain_graph=True)
-            # hess_dot_step = [None] * len(params)
-            # for i, (p, s, g) in enumerate(zip(params, step_dir, grad)):
-            #     if torch.all(s == 0):
-            #         hess_dot_step.append(torch.zeros_like(p))
-            #         continue
-
-            #     grad_dot_s = param_dot(g, s)
-            #     hvp_i = torch.autograd.grad(grad_dot_s, p, retain_graph=True, create_graph=False)[0]
-            #     hess_dot_step[i] = hvp_i
-
-            # hess_dot_step = tuple(hess_dot_step)
         else:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug("Computing the exact hessian vector product split in %d batches of size %d.", objective.n_batches, objective.batch_size)
@@ -129,11 +135,12 @@ class ExactBlockHessianCalculator(CurvatureEstimator):
             for i in range(objective.n_batches):
                 # Calculate hessian of the batch
 
+                zero_vector = tuple(torch.zeros_like(p) for p in params)
                 batched_loss = objective.loss(*params, batch_idx=i)
                 hess_dot_step_batch = [None] * len(params)
                 for i, (p, s_d) in enumerate(zip(params, step_dir)):
                     grad_fn = torch.func.grad(batched_loss, argnums=i)
-                    tangents = zero_params[:i] + (s_d,) + zero_params[i + 1 :]
+                    tangents = zero_vector[:i] + (s_d,) + zero_vector[i + 1 :]
                     _, hess_dot_step_p = torch.func.jvp(grad_fn, params, tuple(tangents))
                     hess_dot_step_batch[i] = hess_dot_step_p
                 hess_dot_step_batch = tuple(hess_dot_step_batch)

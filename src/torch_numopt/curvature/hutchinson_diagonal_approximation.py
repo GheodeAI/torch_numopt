@@ -1,3 +1,11 @@
+"""
+Hutchinson diagonal Hessian approximation.
+
+This estimator uses random Rademacher vectors and the Hessian-vector product to
+estimate the diagonal of the Hessian. It is unbiased and works well for large
+models where full Hessian computation is infeasible.
+"""
+
 from __future__ import annotations
 import logging
 import torch
@@ -9,6 +17,18 @@ logger = logging.getLogger(__name__)
 
 
 class HutchinsonDiagonalApproximation(CurvatureEstimator):
+    """
+    Diagonal Hessian estimator via Hutchinson's method.
+
+    The diagonal is estimated as the average of z ⊙ (H z) over random Rademacher
+    vectors z.
+
+    Parameters
+    ----------
+    n_samples : int, default=1
+        Number of random samples to average.
+    """
+
     def __init__(self, n_samples: int = 1):
         super().__init__(ndim=1, uses_blocks=True)
         self.n_samples = n_samples

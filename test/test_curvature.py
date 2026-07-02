@@ -118,8 +118,6 @@ def test_naive_identity_quadratic(objective, params):
 # ----------------------------------------------------------------------
 # Tests for ExactHessianCalculator (full matrix)
 # ----------------------------------------------------------------------
-
-
 def test_exact_hessian_scaling(objective, params, dataset):
     X, y = dataset
     est = ExactHessianCalculator(damping=None)

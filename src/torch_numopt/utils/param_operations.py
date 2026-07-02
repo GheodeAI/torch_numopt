@@ -309,8 +309,12 @@ def param_numel(params: Params) -> int:
 
 
 def param_detach(params: Params) -> Params:
+    """Detach (and clone) all tensors from the computation graph."""
+
     return tuple(p.detach().clone() for p in params)
 
 
 def param_argnums(params: Params) -> tuple:
+    """Compute the number of parameters in each parameter group."""
+
     return tuple(range(len(params)))

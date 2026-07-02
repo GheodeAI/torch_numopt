@@ -1,3 +1,10 @@
+"""
+Gradient descent optimizers (first-order).
+
+These optimizers use only the gradient (identity curvature). They are the
+simplest methods and serve as a baseline.
+"""
+
 from __future__ import annotations
 from typing import Iterable
 import torch
@@ -10,25 +17,16 @@ from ..utils import Params
 
 class GradientDescent(NumericalOptimizer):
     """
+    Vanilla gradient descent with a fixed or adaptively initialized learning rate.
+
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1e-3
+        Initial learning rate.
+    lr_method : str, optional
+        Learning-rate initialization method (see :class:`NumericalOptimizer`).
     """
 
     def __init__(
@@ -48,25 +46,7 @@ class GradientDescent(NumericalOptimizer):
 
 class GradientDescentLS(LineSearchOptimizer):
     """
-    Parameters
-    ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
+    Gradient descent with a line-search for step length.
     """
 
     def __init__(
@@ -96,25 +76,7 @@ class GradientDescentLS(LineSearchOptimizer):
 
 class GradientDescentTR(TrustRegionOptimizer):
     """
-    Parameters
-    ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
+    Gradient descent with a trust-region (Cauchy point) step.
     """
 
     def __init__(
@@ -132,25 +94,9 @@ class GradientDescentTR(TrustRegionOptimizer):
 
 class GradientDescentLipschitz(NumericalOptimizer):
     """
-    Parameters
-    ----------
+    Gradient descent with a learning rate estimated from the Lipschitz constant.
 
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
+    This is a very simple optimizer that works surprisingly well in practice.
     """
 
     def __init__(

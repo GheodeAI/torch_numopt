@@ -30,6 +30,8 @@ def fix_stability(mat: torch.Tensor):
 
 
 def fix_cond(mat):
+    """Check condition number and apply `fix_stability` if ill-conditioned."""
+
     cond_number = torch.linalg.cond(mat)
     if cond_number > 1e8:
         mat = fix_stability(mat)

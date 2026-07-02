@@ -1,9 +1,17 @@
+"""
+Exact Hessian computation using ``torch.func``.
+
+This module provides the full Hessian matrix (or block-diagonal approximation)
+via automatic differentiation. It supports damping (identity or Fletcher) and
+batched evaluation.
+"""
+
 from __future__ import annotations
 from typing import Optional
 import logging
 import torch
 from functools import partial
-from ..utils import param_dot, param_scalar_prod, param_add, param_argnums
+from ..utils import param_dot, param_scalar_prod, param_add, param_argnums, param_numel
 from ..curvature_estimator import CurvatureEstimator
 from ..objective import ObjectiveFunction
 from ..utils import Params
@@ -13,7 +21,19 @@ logger = logging.getLogger(__name__)
 
 class ExactHessianCalculator(CurvatureEstimator):
     """
-    Approximates the hessian in blocks, only taking the inner-layer second derivatives.
+    Compute the exact Hessian matrix (full or block) of the objective.
+
+    The Hessian is obtained using ``torch.func.hessian``, which computes the
+    full second-order derivatives. For large models, this can be memory-
+    intensive; use the block version for parameter groups.
+
+    Parameters
+    ----------
+    damping : str or None, default=None
+        Damping strategy: ``"identity"`` adds ``mu * I``, ``"fletcher"`` adds
+        ``mu * diag(H)``. If ``None``, no damping is applied.
+    mu : float, default=1e-4
+        Damping coefficient.
     """
 
     def __init__(
@@ -60,7 +80,7 @@ class ExactHessianCalculator(CurvatureEstimator):
 
             # Calculate hessian with every sample in the dataset
             h_params = torch.func.hessian(objective.loss, argnums=tuple(range(len(params))))(*params)
-            h_params = self._construct_hessian(h_params, params)
+            h_params = self._reshape_hessian(self._construct_hessian(h_params, params))
 
         else:
             # Calculate hessian for each batch and add the results
@@ -73,7 +93,7 @@ class ExactHessianCalculator(CurvatureEstimator):
                 batched_loss = partial(objective.loss, batch_idx=i)
 
                 h_param_batch = torch.func.hessian(batched_loss, argnums=tuple(range(len(params))))(*params)
-                h_param_batch = self._construct_hessian(h_param_batch, params)
+                h_param_batch = self._reshape_hessian(self._construct_hessian(h_param_batch, params))
 
                 if objective.reduction == "mean":
                     h_param_batch = objective.batch_data_size(i) * h_param_batch
@@ -93,10 +113,10 @@ class ExactHessianCalculator(CurvatureEstimator):
         # Damp matrix
         if self.damping is not None:
             if self.damping == "identity":
-                # h_params = h_params + self.mu * torch.eye(h_params.shape[0], device=h_params.device)
                 h_params.diagonal().add_(self.mu)
             elif self.damping == "fletcher":
-                # h_params = h_params + self.mu * torch.diag(h_params.diagonal())
+                # n = param_numel(params)
+                # h_params[torch.arange(n), torch.arange(n)] += h_params.diagonal()
                 h_params.diagonal().add_(h_params.diagonal())
             else:
                 raise ValueError(f"Invalid damping strategy {self.damping}.")

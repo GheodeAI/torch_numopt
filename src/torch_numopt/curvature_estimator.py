@@ -13,6 +13,19 @@ logger = logging.getLogger(__name__)
 
 
 class CurvatureEstimator(ABC):
+    """
+    Abstract base class for all curvature estimators.
+
+    A curvature estimator provides a matrix (or matrix-vector product) that
+    approximates the Hessian of the objective. This can be the exact Hessian,
+    Gauss-Newton, diagonal, or identity.
+
+    Subclasses must implement:
+    - ``scaling_matrix``: return the matrix (or block/scalar representation).
+    - ``hvp``: Hessian-vector product.
+    - ``quadratic_form``: pᵀ H p.
+    """
+
     def __init__(self, ndim: int = 2, uses_blocks: bool = False):
         self.ndim = ndim
         self.uses_blocks = uses_blocks
@@ -20,16 +33,21 @@ class CurvatureEstimator(ABC):
     @staticmethod
     def _reshape_hessian(hess: torch.Tensor):
         """
-        Procedure to reshape a misshapen hessian matrix.
-        The input is expected to be an array of size :math:`(X,Y,...,X,Y,...)` and the output will be
-        a square matrix of size :math:`(X \cdot Y \cdots, X \cdot Y \cdots)`.
+        Reshape a misshapen Hessian tensor into a square matrix.
 
+        The input is expected to have an even number of dimensions. The first
+        half of dimensions are combined into the rows, the second half into the
+        columns.
 
         Parameters
         ----------
+        hess : torch.Tensor
+            Hessian tensor from ``torch.func.hessian``.
 
-        hess: torch.Tensor
-            Misshapen hessian matrix.
+        Returns
+        -------
+        torch.Tensor
+            Square matrix.
         """
 
         if hess.dim() == 2:
@@ -50,14 +68,28 @@ class CurvatureEstimator(ABC):
 
     def reset(self):
         """
-        Resets the parameters of the curvature estimator.
-
-        Used primarily for quasi-newton methods with memory.
+        Reset any internal state (intended to be used for quasi-Newton methods).
+        By default does nothing.
         """
 
     def full_scaling_matrix(self, objective: ObjectiveFunction, params: Params) -> torch.Tensor:
         """
-        Obtains the second derivative approximation in matrix form as a single Tensor.
+        Return the curvature matrix as a single dense tensor.
+
+        Depending on the estimator's ``ndim`` and ``uses_blocks``, this method
+        constructs a full matrix from the internal representation.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function.
+        params : Params
+            Parameter tensors.
+
+        Returns
+        -------
+        torch.Tensor
+            Full square matrix of size (total_params, total_params).
         """
 
         n_params = param_numel(params)
@@ -77,24 +109,61 @@ class CurvatureEstimator(ABC):
                 full_B = B
         return full_B
 
-        # return self.scaling_matrix(objective=objective, params=params)
-
     @abstractmethod
     def scaling_matrix(self, objective: ObjectiveFunction, params: Params) -> Iterable | torch.Tensor:
         """
-        Obtains the second derivative approximation.
+        Obtain the curvature matrix in its native representation.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function.
+        params : Params
+            Parameter tensors.
+
+        Returns
+        -------
+        iterable or torch.Tensor
+            Representation of the matrix (scalar, vector, tuple of blocks, or
+            full tensor).
         """
 
     @abstractmethod
     def hvp(self, objective: ObjectiveFunction, params: Params, step_dir: Params) -> Params:
         """
-        Compute B_k p^T
-        with B being the scaling matrix and p the step direction
+        Compute the Hessian-vector product H * v.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function.
+        params : Params
+            Parameter tensors.
+        step_dir : Params
+            Vector v (same structure as params).
+
+        Returns
+        -------
+        Params
+            Result of H * v.
         """
 
     @abstractmethod
     def quadratic_form(self, objective: ObjectiveFunction, params: Params, step_dir: Params) -> torch.Tensor:
         """
-        Compute p B_k p^T
-        with B being the scaling matrix and p the step direction
+        Compute the quadratic form vᵀ H v.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function.
+        params : Params
+            Parameter tensors.
+        step_dir : Params
+            Vector v.
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar value vᵀ H v.
         """

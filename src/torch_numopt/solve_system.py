@@ -1,3 +1,12 @@
+"""
+Linear system solvers for curvature matrices.
+
+This module provides functions to solve H p = -g (or similar) for various
+representations of the curvature (full matrix, block diagonal, diagonal, scalar).
+It includes direct solvers (Cholesky, LU, pseudo-inverse, least-squares) and
+iterative solvers (conjugate gradient, conjugate residual, truncated CG).
+"""
+
 import logging
 import torch
 from .curvature_estimator import CurvatureEstimator
@@ -22,6 +31,34 @@ solver_set = direct_solver_set.union(iterative_solver_set).union({None})
 
 
 def solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs_params: tuple, solver: str = None, **kwargs) -> tuple:
+    """
+    High-level solver that selects the appropriate method based on curvature
+    representation and the requested solver.
+
+    If the primary solver fails, it attempts fallbacks (e.g., least-squares).
+
+    Parameters
+    ----------
+    curvature_estimator : CurvatureEstimator
+        Curvature estimator.
+    objective : ObjectiveFunction
+        Objective function.
+    rhs_params : Params
+        Right-hand side vector (typically -gradient).
+    solver : str or None, default=None
+        Solver name: one of ``"pinv"``, ``"pinv-trunc"``, ``"solve"``,
+        ``"lsqrs"``, ``"safe-lsqrs"``, ``"cholesky"`` (direct), or
+        ``"cg"``, ``"cg-trunc"``, ``"cr"`` (iterative). If ``None``, a default
+        is chosen.
+    **kwargs
+        Additional parameters passed to the specific solver.
+
+    Returns
+    -------
+    Params
+        Solution vector p.
+    """
+
     # Attempt regular solve
     success = True
     try:
@@ -141,6 +178,26 @@ def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveF
 
 
 def conjugate_gradient(curvature_estimator, objective, rhs, max_iter=100, atol=1e-8, tol=1e-4, min_iter=2):
+    """
+    Conjugate gradient method to solve H p = rhs.
+
+    Parameters
+    ----------
+    curvature_estimator : CurvatureEstimator
+    objective : ObjectiveFunction
+    rhs : Params
+        Right-hand side.
+    max_iter : int, default=100
+    atol : float, default=1e-8
+    tol : float, default=1e-4
+    min_iter : int, default=2
+
+    Returns
+    -------
+    Params
+        Solution p.
+    """
+
     eps = torch.finfo(rhs[0].dtype).eps
 
     def damped_hvp(p):
