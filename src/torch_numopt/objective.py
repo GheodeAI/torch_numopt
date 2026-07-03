@@ -189,16 +189,7 @@ class SupervisedLearningObjective(ObjectiveFunction):
             Number of samples in that batch.
         """
 
-        assert batch_idx < self.data_size//self.batch_size, "Invalid batch_idx."
-
-        batch_size = None
-        if self.batch_size is None or batch_idx < self.batch_size - 1:
-            batch_size = self.batch_size
-        elif self.data_size % self.batch_size == 0:
-            batch_size = self.batch_size
-        else:
-            batch_size = self.data_size % self.batch_size
-        return batch_size
+        return min(self.batch_size, self.data_size - batch_idx * self.batch_size)
 
     def get_batch(self, batch_idx: int = None):
         """

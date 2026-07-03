@@ -35,7 +35,7 @@ class AdaHessianMixin:
         Small constant for numerical stability in the division.
     """
 
-    def __init__(self, *args, beta1=0.9, beta2=0.999, k: float = 1, eps: float = 1e-4, **kwargs):
+    def __init__(self, *args, beta1=0.9, beta2=0.999, k: float = 1, eps: float = 1e-8, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.beta1 = beta1
@@ -105,13 +105,13 @@ class AdaHessian(AdaHessianMixin, NumericalOptimizer):
     def __init__(
         self,
         params: Params,
-        lr_init: float = 1,
+        lr_init: float = 1e-2,
         lr_method: str | None = None,
         beta1=0.9,
         beta2=0.999,
         k: float = 1,
-        eps: float = 1e-4,
-        n_samples: int = 5,
+        eps: float = 1e-8,
+        n_samples: int = 10,
     ):
         super().__init__(
             params,
@@ -159,8 +159,8 @@ class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
         beta1=0.9,
         beta2=0.999,
         k: float = 1,
-        eps: float = 1e-4,
-        n_samples: int = 5,
+        eps: float = 1e-8,
+        n_samples: int = 10,
         c1: float = 1e-4,
         c2: float = 0.9,
         tau: float = 0.1,
@@ -181,5 +181,48 @@ class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
             beta2=beta2,
             k=k,
             eps=eps,
-            n_samples=n_samples,
+        )
+
+class DiagonalNewtonLS(LineSearchOptimizer):
+    """
+    Diagonal Newton approximation (using Hutchinson's method) with line search.
+
+    Parameters
+    ----------
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning-rate initialization method.
+    beta1, beta2, k, eps, n_samples : same as in AdaHessian.
+    c1, c2, tau, max_iter, tol : line-search parameters.
+    line_search_method : str, default="backtrack"
+        Line-search method.
+    line_search_cond : str, default="armijo"
+        Line-search condition.
+    """
+
+    def __init__(
+        self,
+        params: Params,
+        lr_init: float = 1,
+        lr_method: str | None = None,
+        n_samples: int = 10,
+        c1: float = 1e-4,
+        c2: float = 0.9,
+        tau: float = 0.1,
+        max_iter: int = 20,
+        tol: float = 1e-8,
+        line_search_method: str = "backtrack",
+        line_search_cond: str = "armijo",
+    ):
+        super().__init__(
+            params,
+            curvature_estimator=HutchinsonDiagonalApproximation(n_samples=n_samples),
+            lr_init=lr_init,
+            lr_method=lr_method,
+            line_search=create_line_search_solver(
+                method=line_search_method, condition=line_search_cond, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol
+            ),
         )

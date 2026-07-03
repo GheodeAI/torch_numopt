@@ -153,7 +153,7 @@ def analytical_dogleg(g, H, radius):
 def test_cauchy_point_scalar(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     radius = 0.5
     solver = CauchyPointTRSolver(curvature_estimator=exact_curvature)
-    new_params, step_dir = solver.optimize_model(scalar_obj, scalar_params, radius, scalar_grad)
+    step_dir = solver.optimize_model(scalar_obj, scalar_params, radius, scalar_grad)
 
     # Step must be within radius
     assert param_norm(step_dir) <= radius + 1e-10
@@ -170,7 +170,7 @@ def test_cauchy_point_scalar(scalar_obj, scalar_params, scalar_grad, exact_curva
 def test_cauchy_point_2d(diag_obj, diag_params, diag_grad, exact_curvature):
     radius = 0.8
     solver = CauchyPointTRSolver(curvature_estimator=exact_curvature)
-    new_params, step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
+    step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
 
     assert param_norm(step_dir) <= radius + 1e-10
     # Analytical Cauchy: g = [-1, -2], H = diag(2,1)
@@ -190,7 +190,7 @@ def test_dogleg_scalar_large_radius(scalar_obj, scalar_params, scalar_grad, exac
     # Radius large enough to contain Newton step
     radius = 10.0
     solver = DoglegTRSolver(curvature_estimator=exact_curvature)
-    new_params, step_dir = solver.optimize_model(scalar_obj, scalar_params, radius, scalar_grad)
+    step_dir = solver.optimize_model(scalar_obj, scalar_params, radius, scalar_grad)
 
     # Newton step: -H^{-1} g = - (1/2)*(-3) = 1.5
     expected = torch.tensor([1.5], dtype=torch.float64)
@@ -201,7 +201,7 @@ def test_dogleg_scalar_large_radius(scalar_obj, scalar_params, scalar_grad, exac
 def test_dogleg_scalar_small_radius(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     radius = 0.3
     solver = DoglegTRSolver(curvature_estimator=exact_curvature)
-    new_params, step_dir = solver.optimize_model(scalar_obj, scalar_params, radius, scalar_grad)
+    step_dir = solver.optimize_model(scalar_obj, scalar_params, radius, scalar_grad)
 
     # For small radius, dogleg = Cauchy point scaled to boundary = -radius * g / ||g|| = -0.3*(-3)/3 = 0.3
     expected = torch.tensor([0.3], dtype=torch.float64)
@@ -212,7 +212,7 @@ def test_dogleg_scalar_small_radius(scalar_obj, scalar_params, scalar_grad, exac
 def test_dogleg_2d(diag_obj, diag_params, diag_grad, exact_curvature):
     radius = 1.2
     solver = DoglegTRSolver(curvature_estimator=exact_curvature)
-    new_params, step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
+    step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
 
     g = diag_grad[0]
     H = exact_curvature.scaling_matrix(diag_obj, diag_params)
@@ -228,16 +228,14 @@ def test_dogleg_non_positive_definite(diag_obj, diag_params, diag_grad):
     class NonPDCurvature(ExactHessianCalculator):
         def scaling_matrix(self, objective, params):
             H = super().scaling_matrix(objective, params)
-            # Make it non-PD by subtracting 0.5 from the first diagonal element
-            H[0, 0] -= 1.0  # now first eigenvalue = 1 (since original was 2, now 1) actually still positive.
-            # Let's make it negative: original H = diag(2,1), subtract 3 from first => -1
-            H[0, 0] -= 3.0
+            # Make it non-PD by subtracting 3 from first diagonal element
+            H[0, 0] -= 3.0   # now first eigenvalue = -1 (since original was 2)
             return H
 
     curv = NonPDCurvature(damping=None)
     radius = 1.0
     solver = DoglegTRSolver(curvature_estimator=curv)
-    new_params, step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
+    step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
 
     # Should still produce a descent direction and stay within radius
     assert param_norm(step_dir) <= radius + 1e-10
@@ -252,7 +250,7 @@ def test_dogleg_non_positive_definite(diag_obj, diag_params, diag_grad):
 def test_exact_tr_scalar(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     radius = 1.0
     solver = ExactTRSolver(curvature_estimator=exact_curvature, iters=20, tol=1e-10)
-    new_params, step_dir = solver.optimize_model(scalar_obj, scalar_params, radius, scalar_grad)
+    step_dir = solver.optimize_model(scalar_obj, scalar_params, radius, scalar_grad)
 
     # Exact solution for scalar: if Newton step (1.5) > radius, solution is on boundary: p = radius * sign(-g) = 1.0
     expected = torch.tensor([1.0], dtype=torch.float64)
@@ -264,9 +262,9 @@ def test_exact_tr_scalar(scalar_obj, scalar_params, scalar_grad, exact_curvature
 def test_exact_tr_2d_large_radius(diag_obj, diag_params, diag_grad, exact_curvature):
     radius = 10.0
     solver = ExactTRSolver(curvature_estimator=exact_curvature, iters=20, tol=1e-10)
-    new_params, step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
+    step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
 
-    # Newton step: H^{-1} g = [0.5, 2] (since g = [-1,-2], H=diag(2,1) => -H^{-1}g = [0.5, 2])
+    # Newton step: -H^{-1}g = [0.5, 2]
     expected = torch.tensor([0.5, 2.0], dtype=torch.float64)
     torch.testing.assert_close(step_dir[0], expected, rtol=1e-5, atol=1e-6)
     assert param_norm(step_dir) <= radius + 1e-10
@@ -275,7 +273,7 @@ def test_exact_tr_2d_large_radius(diag_obj, diag_params, diag_grad, exact_curvat
 def test_exact_tr_2d_small_radius(diag_obj, diag_params, diag_grad, exact_curvature):
     radius = 1e-4
     solver = ExactTRSolver(curvature_estimator=exact_curvature, iters=20, tol=1e-10)
-    new_params, step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
+    step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
 
     # For small radius, exact solution = Cauchy point on boundary = -radius * g / ||g||
     g = diag_grad[0]
@@ -296,13 +294,11 @@ def test_exact_tr_non_positive_definite(diag_obj, diag_params, diag_grad):
     curv = NonPDCurvature(damping=None)
     radius = 1.0
     solver = ExactTRSolver(curvature_estimator=curv, iters=20, tol=1e-10)
-    new_params, step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
+    step_dir = solver.optimize_model(diag_obj, diag_params, radius, diag_grad)
 
     assert param_norm(step_dir) <= radius + 1e-10
     assert param_dot(diag_grad, step_dir) < 0
-    # Additionally, check that the step is on the boundary (since Hessian not positive definite)
-    # The exact solver should still find a point on the boundary.
-    # We can check that ||p|| ≈ radius
+    # The exact solver should put the step on the boundary when Hessian is not PD
     assert abs(param_norm(step_dir).item() - radius) < 1e-6
 
 

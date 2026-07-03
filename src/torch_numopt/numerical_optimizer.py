@@ -265,6 +265,7 @@ class NumericalOptimizer(Optimizer, ABC):
                 if p.grad is not None:
                     params_with_grad.append(p)
                     gradient.append(p.grad)
+                    p.grad = None
 
             self.apply_gradients(
                 objective=objective,
@@ -446,10 +447,12 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
             self.prev_loss = new_loss
             self.prev_params = param_detach(new_params)
             self.prev_step_dir = param_detach(step_dir)
-            self.prev_grad = param_detach(grad_params)
         else:
             logging.info("Parameters were not accepted.")
+            self.prev_loss = prev_loss
+            self.prev_params = param_detach(params)
 
+        self.prev_grad = param_detach(grad_params)
         self.prev_lr_init = self.prev_lr
         self.prev_lr = torch_to_float(model_radius)
 

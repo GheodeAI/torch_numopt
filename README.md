@@ -1,7 +1,5 @@
 # Torch Numerical Optimization (torch_numopt)
 
-[![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
-
 **torch_numopt** is a PyTorch library that provides a comprehensive collection of **classical numerical optimization algorithms** for machine learning and general‑purpose differentiable optimization. While PyTorch’s built‑in optimizers focus on first‑order methods (SGD, Adam, etc.), this package implements second‑order and quasi‑Newton methods that can significantly accelerate convergence on problems where curvature information is available or can be approximated.
 
 The library is designed to be modular, extensible, and efficient. It offers:
@@ -102,8 +100,9 @@ For more detailed examples and advanced usage (trust‑region, custom curvature 
 | `ConjugateGradientLS`   | None (uses gradient)   | Line search          | – |
 | `LBFGS`                 | Approx. inverse Hessian | Fixed learning rate  | Quasi‑Newton, memory‑efficient |
 | `LBFGSLS`               | Approx. inverse Hessian | Line search          | Recommended for L‑BFGS |
-| `AdaHessian`            | Diagonal Hessian (Hutchinson) | Fixed learning rate | Adaptive, scalable |
-| `AdaHessianLS`          | Diagonal Hessian (Hutchinson) | Line search | – |
+| `AdaHessian`            | Diagonal Hessian (Hutchinson) | Fixed learning rate | Adaptive, scalable, uses momentum |
+| `AdaHessianLS`          | Diagonal Hessian (Hutchinson) | Line search | Adaptive, scalable, uses momentum |
+| `DiagonalNewtonLS`      | Diagonal Hessian (Hutchinson) | Line search | – |
 | `GradientDescent`       | Identity               | Fixed learning rate  | Baseline; requires manual tuning |
 | `GradientDescentLS`     | Identity               | Line search          | Robust step‑size selection |
 | `GradientDescentTR`     | Identity               | Trust region (Cauchy point) | Simple trust‑region baseline |

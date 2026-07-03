@@ -175,9 +175,8 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
             for i, (p, s_d) in enumerate(zip(params, step_dir)):
                 tangents = zero_params[:i] + (s_d,) + zero_params[i + 1 :]
                 _, Jv = torch.func.jvp(objective.residual, params, tuple(tangents))
-                _, jac_fn = torch.func.vjp(objective.residual, params)
-                hess_dot_step[i] = jac_fn(*Jv)
-            hess_dot_step = tuple(hess_dot_step)
+                _, jac_fn = torch.func.vjp(objective.residual, *params)
+                hess_dot_step[i] = jac_fn(Jv)[i]
         else:
             # Calculate hessian for each batch and add the results
             if logger.isEnabledFor(logging.DEBUG):
@@ -185,7 +184,7 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
                     "Computing the Gauss-Newton Hessian-vector product, split in %d batches of size %d.", objective.n_batches, objective.batch_size
                 )
 
-            hess_approx = None
+            hess_dot_step = None
             for i in range(objective.n_batches):
                 # Calculate approximate hessian of the batch
                 hess_approx_batch = [None] * len(params)
@@ -197,29 +196,31 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
                     hess_approx_batch[i] = jac_fn(*Jv)
                 hess_approx_batch = tuple(hess_approx_batch)
 
-                if hess_approx is None:
-                    hess_approx = hess_approx_batch
+                if hess_dot_step is None:
+                    hess_dot_step = hess_approx_batch
                 else:
-                    hess_approx = param_add(hess_approx, hess_approx_batch)
+                    hess_dot_step = param_add(hess_dot_step, hess_approx_batch)
 
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("Computed batch %d for the Gauss-Newton hvp...", i)
 
         if objective.reduction == "mean":
-            hess_approx = param_scalar_prod(2 / objective.data_size, hess_approx)
+            print(2 / objective.data_size)
+            print(hess_dot_step)
+            hess_dot_step = param_scalar_prod(2 / objective.data_size, hess_dot_step)
         else:
-            hess_approx = param_scalar_prod(2, hess_approx)
+            hess_dot_step = param_scalar_prod(2, hess_dot_step)
 
         # Damp vector
         if self.damping is not None:
             if self.damping == "identity":
-                hess_approx = param_add(hess_approx, param_scalar_prod(self.mu, step_dir))
+                hess_dot_step = param_add(hess_dot_step, param_scalar_prod(self.mu, step_dir))
             elif self.damping == "fletcher":
                 raise NotImplementedError("Fletcher damping not available for hvp.")
             else:
                 raise ValueError(f"Invalid damping strategy {self.damping}.")
 
-        return hess_approx
+        return hess_dot_step
 
     def quadratic_form(self, objective, params, grad_params: Params) -> Params:
         Jp = self.jvp(objective, params, grad_params)

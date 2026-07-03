@@ -22,7 +22,7 @@ from .newton import Newton, NewtonLS, NewtonTR, NewtonCG, NewtonCGLS, NewtonCGTR
 from .gauss_newton import GaussNewton, GaussNewtonLS, GaussNewtonTR
 from .levenberg_marquardt import LevenbergMarquardt
 from .lbfgs import LBFGS, LBFGSLS
-from .adahessian import AdaHessian, AdaHessianLS
+from .adahessian import AdaHessian, AdaHessianLS, DiagonalNewtonLS
 
 __all__ = [
     "GradientDescent",
@@ -45,4 +45,5 @@ __all__ = [
     "LBFGSLS",
     "AdaHessian",
     "AdaHessianLS",
+    "DiagonalNewtonLS"
 ]

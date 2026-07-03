@@ -126,9 +126,9 @@ class GaussNewtonApproximation(CurvatureEstimator):
         # Damp matrix
         if self.damping is not None:
             if self.damping == "identity":
-                h_params = h_params + self.mu * torch.eye(h_params.shape[0], device=h_params.device)
+                h_params.diagonal().add_(self.mu)
             elif self.damping == "fletcher":
-                h_params = h_params + self.mu * torch.diag(h_params.diagonal())
+                h_params.diagonal().add_(self.mu * h_params.diagonal())
             else:
                 raise ValueError(f"Invalid damping strategy {self.damping}.")
 

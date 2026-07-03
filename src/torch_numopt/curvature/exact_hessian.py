@@ -115,9 +115,7 @@ class ExactHessianCalculator(CurvatureEstimator):
             if self.damping == "identity":
                 h_params.diagonal().add_(self.mu)
             elif self.damping == "fletcher":
-                # n = param_numel(params)
-                # h_params[torch.arange(n), torch.arange(n)] += h_params.diagonal()
-                h_params.diagonal().add_(h_params.diagonal())
+                h_params.diagonal().add_(self.mu * h_params.diagonal())
             else:
                 raise ValueError(f"Invalid damping strategy {self.damping}.")
 
