@@ -1,3 +1,12 @@
+"""
+Limited-memory BFGS (L-BFGS) optimizers.
+
+L-BFGS is a quasi-Newton method that approximates the inverse Hessian using a
+limited history of past updates (s, y pairs). It is memory-efficient and works
+well for medium-scale optimization problems. This module provides both a fixed
+learning rate variant and a line-search variant (recommended).
+"""
+
 from __future__ import annotations
 import torch
 import torch.nn as nn

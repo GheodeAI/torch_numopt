@@ -1,3 +1,12 @@
+"""
+AdaHessian optimizer (diagonal Hessian with momentum).
+
+This module implements the AdaHessian algorithm, which combines the adaptive
+learning rate mechanism of Adam with a diagonal Hessian approximation computed
+via Hutchinson's method. It maintains moving averages of both the gradient and
+the Hessian diagonal, and uses them to compute a preconditioned step direction.
+"""
+
 from __future__ import annotations
 import torch
 from ..utils import param_reshape_like, Params

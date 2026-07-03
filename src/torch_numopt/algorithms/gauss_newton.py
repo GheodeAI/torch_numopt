@@ -1,3 +1,12 @@
+"""
+Gauss-Newton optimization algorithms for least-squares problems.
+
+The Gauss-Newton method approximates the Hessian as JᵀJ, where J is the Jacobian
+of the residual vector. This module provides three variants: a vanilla version
+with a fixed learning rate, a line-search version, and a trust-region version.
+The block-diagonal approximation is available for memory efficiency.
+"""
+
 from __future__ import annotations
 from ..line_search import create_line_search_solver
 from ..trust_region import create_trust_region_solver
@@ -57,31 +66,49 @@ class GaussNewton(NumericalOptimizer):
 
 class GaussNewtonLS(LineSearchOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+    Gauss-Newton optimizer with line search for step-length selection.
+
+    This method computes the step direction by solving the Gauss-Newton system
+    (JᵀJ) p = -g, where J is the Jacobian of the residuals and g is the gradient.
+    The resulting direction is then scaled by a step length determined by a
+    line search (backtracking, interpolation, or bisection) that satisfies a
+    chosen condition (Armijo, Wolfe, etc.).
+
+    This is particularly useful for non-linear least-squares problems where the
+    residual vector is known and the Hessian can be approximated as JᵀJ.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
+    params : Params
+        Parameter tensors to optimize.
+    lr_init : float, default=1
+        Initial guess for the learning rate (starting point for the line search).
+    lr_method : str or None, default=None
+        Learning-rate initialization method (see :class:`NumericalOptimizer`).
+    c1 : float, default=1e-4
+        Sufficient decrease parameter (Armijo condition).
+    c2 : float, default=0.9
+        Curvature condition parameter (Wolfe conditions).
+    tau : float, default=0.1
+        Step-size reduction factor for backtracking.
+    max_iter : int, default=20
+        Maximum number of line-search iterations.
+    tol : float, default=1e-8
+        Tolerance for stopping (e.g., minimum step size).
+    line_search_method : str, default="backtrack"
+        Line-search algorithm. Options: "backtrack", "interpolate", "bisect".
+    line_search_cond : str, default="armijo"
+        Stopping condition. Options: "greedy", "armijo", "wolfe",
+        "strong-wolfe", "goldstein".
+    solver : str, default="solve"
+        Linear solver used to invert the Gauss-Newton system.
+    damping : str or None, default=None
+        Damping strategy ("identity" or "fletcher") to improve conditioning.
+    mu : float, default=1
+        Damping coefficient.
+    block_hessian : bool, default=True
+        If True, use block-diagonal Gauss-Newton (each parameter group forms
+        its own block) to save memory; otherwise, compute the full matrix.
     """
 
     def __init__(
@@ -120,31 +147,39 @@ class GaussNewtonLS(LineSearchOptimizer):
 
 class GaussNewtonTR(TrustRegionOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+    Gauss-Newton optimizer with a trust-region subproblem solver.
+
+    This method builds a quadratic model using the Gauss-Newton approximation
+    of the Hessian (JᵀJ) and solves the trust-region subproblem
+        minimize  m(p) = f + gᵀp + ½ pᵀ(JᵀJ)p   subject to  ||p|| ≤ Δ.
+    The step is computed by a trust-region solver (e.g., Cauchy point, dogleg,
+    exact, or Steihaug-Toint) that respects the trust-region radius.
+
+    Trust-region Gauss-Newton is robust and often converges faster than the
+    line-search variant, especially in regions where the quadratic model is
+    not accurate.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
+    params : Params
+        Parameter tensors to optimize.
+    radius_init : float, default=1.0
+        Initial trust-region radius.
+    trust_region_method : str, default="exact"
+        Trust-region solver method (see `create_trust_region_solver`).
+        Common choices: "cauchy", "dogleg", "exact", "steihaug-toint".
+    solver : str, default="solve"
+        Linear solver used internally (for methods that require solving a system).
+    damping : str or None, default=None
+        Damping strategy to improve conditioning.
+    mu : float, default=1
+        Damping coefficient.
+    block_hessian : bool, default=False
+        If True, use block-diagonal Gauss-Newton; otherwise, compute the full
+        matrix. Note: block-diagonal is often sufficient and saves memory.
+    accept_tol : float, default=0.1
+        Threshold for the ratio rho (actual vs. predicted reduction) above
+        which the step is accepted.
     """
 
     def __init__(

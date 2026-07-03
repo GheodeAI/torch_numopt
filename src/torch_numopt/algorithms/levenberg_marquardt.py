@@ -1,3 +1,12 @@
+"""
+Levenberg-Marquardt optimizer (trust-region variant).
+
+The Levenberg-Marquardt algorithm interpolates between the Gauss-Newton method
+and gradient descent by adaptively adjusting a damping parameter (mu). It is
+particularly effective for nonlinear least-squares problems and is implemented
+here as a trust-region optimizer with Fletcher's damping strategy.
+"""
+
 from __future__ import annotations
 import logging
 import torch
