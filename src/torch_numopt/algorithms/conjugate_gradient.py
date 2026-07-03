@@ -78,6 +78,24 @@ class ConjugateGradientMixin:
 
 
 class ConjugateGradient(ConjugateGradientMixin, NumericalOptimizer):
+    """
+    Non-linear conjugate gradient optimizer with fixed learning rate.
+
+    Uses the Fletcher-Reeves, Polak-Ribière, etc. formulas to compute the
+    search direction without explicit curvature.
+
+    Parameters
+    ----------
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1.0
+        Initial learning rate.
+    lr_method : str or None, default="lipschitz"
+        Learning rate initialization method.
+    cg_method : str, default="PRP+"
+        Conjugate gradient formula: "FR", "PR", "PRP+", "HS", "DY".
+    """
+
     def __init__(
         self,
         params: Params,
@@ -89,6 +107,38 @@ class ConjugateGradient(ConjugateGradientMixin, NumericalOptimizer):
 
 
 class ConjugateGradientLS(ConjugateGradientMixin, LineSearchOptimizer):
+    """
+    Non-linear conjugate gradient with line search.
+
+    Combines conjugate gradient direction with a line-search to determine
+    the step length.
+
+    Parameters
+    ----------
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1.0
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning rate initialization method.
+    c1 : float, default=1e-4
+        Sufficient decrease parameter (Armijo).
+    c2 : float, default=0.9
+        Curvature condition parameter (Wolfe).
+    tau : float, default=0.1
+        Step reduction factor for backtracking.
+    max_iter : int, default=20
+        Maximum iterations for line search.
+    tol : float, default=1e-8
+        Tolerance (e.g., minimum step).
+    line_search_method : str, default="backtrack"
+        Line-search method (see create_line_search_solver).
+    line_search_cond : str, default="armijo"
+        Line-search stopping condition.
+    cg_method : str, default="PRP+"
+        Conjugate gradient formula.
+    """
+
     def __init__(
         self,
         params: Params,

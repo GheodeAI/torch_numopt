@@ -62,6 +62,23 @@ class LBFGSMixin:
 
 
 class LBFGS(LBFGSMixin, NumericalOptimizer):
+    """
+    Limited-memory BFGS optimizer with fixed learning rate.
+
+    Maintains a history of past updates (s, y) to approximate the inverse Hessian.
+
+    Parameters
+    ----------
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1.0
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning rate initialization method.
+    memory_size : int, default=10
+        Number of past updates to store.
+    """
+
     def __init__(
         self,
         params: Params,
@@ -73,6 +90,29 @@ class LBFGS(LBFGSMixin, NumericalOptimizer):
 
 
 class LBFGSLS(LBFGSMixin, LineSearchOptimizer):
+    """
+    L-BFGS with line search.
+
+    After computing the L-BFGS direction, a line search is performed to find
+    an appropriate step length. This is the recommended way to use L-BFGS.
+
+    Parameters
+    ----------
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning-rate initialization method.
+    c1, c2, tau, max_iter, tol : line-search parameters.
+    memory_size : int, default=10
+        Number of stored (s, y) pairs.
+    line_search_method : str, default="interpolate"
+        Line-search method (interpolate is often good for L-BFGS).
+    line_search_cond : str, default="wolfe"
+        Condition (Wolfe conditions are typical for L-BFGS).
+    """
+
     def __init__(
         self,
         params: Params,

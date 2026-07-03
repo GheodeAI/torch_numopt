@@ -98,7 +98,7 @@ class FixedStepLineSearch(LineSearchSolver):
         super().__init__()
         self.fixed_lr = fixed_lr
 
-    def line_search(self, params, step_dir, grad_params, lr_init, objective):
+    def find_step_size(self, params, step_dir, grad_params, lr_init, objective):
         lr = self.fixed_lr
         new_params = param_add(params, param_scalar_prod(lr, step_dir))
         return new_params, lr
@@ -242,9 +242,9 @@ def test_line_search_optimizer_step_calls_line_search(scalar_obj, scalar_params,
             super().__init__(fixed_lr=0.3)
             self.called = False
 
-        def line_search(self, params, step_dir, grad_params, lr_init, objective):
+        def find_step_size(self, params, step_dir, grad_params, lr_init, objective):
             self.called = True
-            return super().line_search(params, step_dir, grad_params, lr_init, objective)
+            return super().find_step_size(params, step_dir, grad_params, lr_init, objective)
 
     ls = RecordingLineSearch()
     opt = LineSearchOptimizer(params=scalar_params, curvature_estimator=exact_curvature, line_search=ls, lr_init=1.0, lr_method=None)

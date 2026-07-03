@@ -7,12 +7,48 @@ from ..utils import Params
 
 
 class GaussNewton(NumericalOptimizer):
+    """
+    Gauss-Newton optimizer (no line search or trust region).
+
+    Uses the Gauss-Newton approximation of the Hessian and solves the linear
+    system to obtain the step direction, then applies a fixed learning rate.
+
+    Parameters
+    ----------
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1e-3
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning rate initialization method.
+    solver : str, default="solve"
+        Linear solver for the system.
+    damping : str or None, default=None
+        Damping strategy.
+    mu : float, default=1
+        Damping coefficient.
+    block_hessian : bool, default=True
+        If True, use block-diagonal Gauss-Newton; else full.
+    """
+
     def __init__(
-        self, params: Params, lr_init: float = 1e-3, lr_method: str | None = None, solver: str = "solve", damping: str | None = None, mu: float = 1
+        self,
+        params: Params, 
+        lr_init: float = 1e-3,
+        lr_method: str | None = None,
+        solver: str = "solve",
+        damping: str | None = None,
+        mu: float = 1,
+        block_hessian: bool = True,
     ):
+        if block_hessian:
+            curvature_estimator = GaussNewtonBlockApproximation(damping=damping, mu=mu)
+        else:
+            curvature_estimator = GaussNewtonApproximation(damping=damping, mu=mu)
+
         super().__init__(
             params,
-            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
+            curvature_estimator=curvature_estimator,
             lr_init=lr_init,
             lr_method=lr_method,
             solver=solver,
@@ -61,10 +97,18 @@ class GaussNewtonLS(LineSearchOptimizer):
         line_search_method: str = "backtrack",
         line_search_cond: str = "armijo",
         solver: str = "solve",
+        damping: str | None = None,
+        mu: float = 1,
+        block_hessian: bool = True,
     ):
+        if block_hessian:
+            curvature_estimator = GaussNewtonBlockApproximation(damping=damping, mu=mu)
+        else:
+            curvature_estimator = GaussNewtonApproximation(damping=damping, mu=mu)
+
         super().__init__(
             params,
-            curvature_estimator=GaussNewtonBlockApproximation(),
+            curvature_estimator=curvature_estimator,
             lr_init=lr_init,
             lr_method=lr_method,
             line_search=create_line_search_solver(
@@ -109,9 +153,18 @@ class GaussNewtonTR(TrustRegionOptimizer):
         radius_init: float = 1.0,
         trust_region_method: str = "exact",
         solver: str = "solve",
+        damping: str | None = None,
+        mu: float = 1,
+        block_hessian: bool = False,
     ):
+        if block_hessian:
+            curvature_estimator = GaussNewtonBlockApproximation(damping=damping, mu=mu)
+        else:
+            curvature_estimator = GaussNewtonApproximation(damping=damping, mu=mu)
+
         super().__init__(
             params,
-            trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=GaussNewtonApproximation(), solver=solver),
+            trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=curvature_estimator, solver=solver),
+            curvature_estimator=curvature_estimator,
             radius_init=radius_init,
         )

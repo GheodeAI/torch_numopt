@@ -190,7 +190,7 @@ class LineSearchSolver(ABC):
 
     @abstractmethod
     @torch.enable_grad()
-    def line_search(
+    def find_step_size(
         self,
         params: Params,
         step_dir: Params,
@@ -230,7 +230,7 @@ class BacktrackingLineSearch(LineSearchSolver):
     """
 
     @torch.enable_grad()
-    def line_search(
+    def find_step_size(
         self,
         params: Params,
         step_dir: Params,
@@ -279,7 +279,7 @@ class InterpolationLineSearch(LineSearchSolver):
     """
 
     @torch.enable_grad()
-    def line_search(
+    def find_step_size(
         self,
         params: Params,
         step_dir: Params,
@@ -366,7 +366,7 @@ class BisectionLineSearch(LineSearchSolver):
     """
 
     @torch.enable_grad()
-    def line_search(self, params, step_dir, grad_params, lr_init, objective):
+    def find_step_size(self, params, step_dir, grad_params, lr_init, objective):
         loss = objective.loss(*params)
         a_min = 0
         a_max = lr_init

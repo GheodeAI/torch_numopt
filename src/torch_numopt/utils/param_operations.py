@@ -315,6 +315,10 @@ def param_detach(params: Params) -> Params:
 
 
 def param_argnums(params: Params) -> tuple:
-    """Compute the number of parameters in each parameter group."""
+    """Return a tuple of indices (0, 1, ..., len(params)-1) for the parameter groups.
+
+    This is a convenience function used to pass `argnums` to `torch.func` 
+    when computing Hessians or Jacobians.
+    """
 
     return tuple(range(len(params)))

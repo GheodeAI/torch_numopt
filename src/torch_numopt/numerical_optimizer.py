@@ -314,7 +314,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
 
         lr_init = self.initialize_lr(self.lr_init, grad_params, step_dir, objective, params)
 
-        new_params, lr = self.line_search(params, step_dir, grad_params, lr_init, objective)
+        new_params, lr = self.line_search.find_step_size(params, step_dir, grad_params, lr_init, objective)
 
         with torch.no_grad():
             for param, new_param in zip(params, new_params):
@@ -366,31 +366,39 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         self.accept_tol = accept_tol
 
     def new_model_radius(self, objective, radius, radius_init, loss, params, grad_params, new_loss, step_dir):
-        """_summary_
+        """
+        Update the trust-region radius based on the ratio rho.
+
+        The ratio rho measures the agreement between the actual reduction and
+        the predicted reduction. If rho is small, the model is poor, so shrink
+        the radius; if rho is large and the step is at the boundary, expand it.
 
         Parameters
         ----------
-        objective : _type_
-            _description_
-        radius : _type_
-            _description_
-        radius_init : _type_
-            _description_
-        loss : _type_
-            _description_
-        params : _type_
-            _description_
-        grad_params : _type_
-            _description_
-        new_loss : _type_
-            _description_
-        step_dir : _type_
-            _description_
+        objective : ObjectiveFunction
+            Objective function.
+        radius : float
+            Current trust-region radius.
+        radius_init : float
+            Initial radius (used as upper bound for expansion).
+        loss : torch.Tensor
+            Loss value at current parameters.
+        params : Params
+            Current parameters.
+        grad_params : Params
+            Gradient at current parameters.
+        new_loss : torch.Tensor
+            Loss value at proposed new parameters.
+        step_dir : Params
+            Proposed step direction.
 
         Returns
         -------
-        _type_
-            _description_
+        tuple (rho, new_radius)
+            rho : float
+                Ratio of actual to predicted reduction.
+            new_radius : float
+                Updated trust-region radius.
         """
 
         eps = torch.finfo(loss.dtype).eps

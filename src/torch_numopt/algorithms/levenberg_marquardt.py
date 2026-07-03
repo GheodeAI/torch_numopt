@@ -13,6 +13,32 @@ logger = logging.getLogger(__name__)
 
 
 class LevenbergMarquardt(TrustRegionOptimizer):
+    """
+    Levenberg-Marquardt optimizer (trust-region variant).
+
+    This optimizer solves the least-squares problem by adaptively combining
+    Gauss-Newton and gradient descent via a damping parameter (mu). The step is
+    computed by solving (JᵀJ + mu I) p = -g. The damping is adjusted based on
+    the ratio rho.
+
+    Parameters
+    ----------
+    params : Params
+        Parameter tensors.
+    mu : float, default=1e-2
+        Initial damping parameter.
+    mu_dec : float, default=0.1
+        Factor by which mu is multiplied when the step is successful (reduction).
+    mu_max : float, default=1e10
+        Maximum allowed damping.
+    accept_tol : float, default=0
+        Threshold for rho to accept the step.
+    damping : str, default="fletcher"
+        Damping strategy for the curvature estimator (e.g., "identity" or "fletcher").
+    solver : str, default="cholesky"
+        Linear solver for the system.
+    """
+
     def __init__(
         self,
         params: Params,
@@ -23,7 +49,7 @@ class LevenbergMarquardt(TrustRegionOptimizer):
         damping: str = "fletcher",
         solver: str = "cholesky",
     ):
-        assert damping is not None
+        assert damping is not None, "Levenberg-Marquardt must use a damping strategy."
         super().__init__(
             params,
             trust_region=CauchyPointTRSolver(curvature_estimator=GaussNewtonBlockApproximation(damping=None)),

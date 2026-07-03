@@ -21,6 +21,7 @@ from .utils import (
     param_flatten,
     param_reshape_like,
     param_zero_like,
+    Params
 )
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ iterative_solver_set = {"cg", "cg-trunc", "cr"}
 solver_set = direct_solver_set.union(iterative_solver_set).union({None})
 
 
-def solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs_params: tuple, solver: str = None, **kwargs) -> tuple:
+def solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs_params: Params, solver: str = None, **kwargs) -> Params:
     """
     High-level solver that selects the appropriate method based on curvature
     representation and the requested solver.
@@ -87,7 +88,7 @@ def solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFu
     return rhs_params
 
 
-def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs_params: tuple, solver: str = None, **kwargs) -> tuple:
+def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs_params: Params, solver: str = None, **kwargs) -> Params:
     eps = torch.finfo(rhs_params[0].dtype).eps
     params = objective.params
 
@@ -177,25 +178,35 @@ def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveF
     return tuple(solution_params)
 
 
-def conjugate_gradient(curvature_estimator, objective, rhs, max_iter=100, atol=1e-8, tol=1e-4, min_iter=2):
+def conjugate_gradient(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs: Params, max_iter: int=100, atol:float=1e-8, tol:float=1e-4, min_iter:int=2) -> Params:
     """
-    Conjugate gradient method to solve H p = rhs.
+    Solve H p = rhs using the conjugate gradient (CG) method.
+
+    The Hessian (or its approximation) is accessed via the `hvp` method of the
+    curvature estimator. This is an iterative method that only requires matrix-
+    vector products, making it suitable for large-scale problems.
 
     Parameters
     ----------
     curvature_estimator : CurvatureEstimator
+        Provides the Hessian-vector product (Hvp).
     objective : ObjectiveFunction
+        Objective function (needed to pass parameters to Hvp).
     rhs : Params
-        Right-hand side.
+        Right-hand side vector (typically -gradient).
     max_iter : int, default=100
+        Maximum number of CG iterations.
     atol : float, default=1e-8
+        Absolute tolerance for the residual norm.
     tol : float, default=1e-4
+        Relative tolerance (residual norm <= tol * norm(rhs)).
     min_iter : int, default=2
+        Minimum iterations before checking stopping criteria.
 
     Returns
     -------
     Params
-        Solution p.
+        Solution vector p.
     """
 
     eps = torch.finfo(rhs[0].dtype).eps
@@ -226,7 +237,23 @@ def conjugate_gradient(curvature_estimator, objective, rhs, max_iter=100, atol=1
     return new_params
 
 
-def truncated_cg(curvature_estimator, objective, rhs, max_iter=100, atol=1e-8, tol=1e-4, min_iter=2):
+def truncated_cg(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs: Params, max_iter: int=100, atol:float=1e-8, tol:float=1e-4, min_iter:int=2) -> Params:
+    """
+    Truncated conjugate gradient method.
+
+    Similar to CG, but it stops early if a direction of negative curvature is
+    encountered (pᵀHp ≤ 0). 
+
+    Parameters
+    ----------
+    same as conjugate_gradient
+
+    Returns
+    -------
+    Params
+        Approximate solution (may be truncated).
+    """
+
     eps = torch.finfo(rhs[0].dtype).eps
     params = objective.params
 
@@ -259,6 +286,23 @@ def truncated_cg(curvature_estimator, objective, rhs, max_iter=100, atol=1e-8, t
 
 
 def conjugate_residual(curvature_estimator, objective, rhs, max_iter=100, atol=1e-8, tol=1e-4, min_iter=2):
+    """
+    Conjugate residual method for solving H p = rhs.
+
+    Similar to CG but uses the residual norm in the construction of the
+    search direction. It can be more robust for certain non-symmetric systems,
+    though here it is used with symmetric H.
+
+    Parameters
+    ----------
+    same as conjugate_gradient
+
+    Returns
+    -------
+    Params
+        Solution vector p.
+    """
+
     eps = torch.finfo(rhs[0].dtype).eps
     params = objective.params
 

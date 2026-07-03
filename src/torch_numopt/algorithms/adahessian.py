@@ -7,6 +7,25 @@ from ..curvature import HutchinsonDiagonalApproximation
 
 
 class AdaHessianMixin:
+    """
+    Mixin that implements the AdaHessian algorithm.
+
+    AdaHessian uses a diagonal Hessian approximation (via Hutchinson's method)
+    and maintains moving averages of the gradient and the squared diagonal Hessian.
+
+    Parameters
+    ----------
+    beta1 : float, default=0.9
+        Exponential decay rate for the gradient moment.
+    beta2 : float, default=0.999
+        Exponential decay rate for the Hessian diagonal moment.
+    k : float, default=1
+        Exponent used in the denominator; typically 0.5 for AdaHessian (root),
+        but here set to 1 to allow flexibility.
+    eps : float, default=1e-4
+        Small constant for numerical stability in the division.
+    """
+
     def __init__(self, *args, beta1=0.9, beta2=0.999, k: float = 1, eps: float = 1e-4, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -47,6 +66,33 @@ class AdaHessianMixin:
 
 
 class AdaHessian(AdaHessianMixin, NumericalOptimizer):
+    """
+    AdaHessian optimizer (diagonal Hessian with momentum).
+
+    Uses Hutchinson diagonal Hessian approximation and momentum for both
+    gradient and Hessian diagonal, similar to Adam but using second-order
+    information.
+
+    Parameters
+    ----------
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning rate initialization method.
+    beta1 : float, default=0.9
+        Exponential decay rate for the first moment estimate (gradient).
+    beta2 : float, default=0.999
+        Exponential decay rate for the second moment estimate (Hessian diagonal).
+    k : float, default=1
+        Exponent for the Hessian diagonal in the step calculation (0.5 for AdaHessian).
+    eps : float, default=1e-4
+        Small constant for numerical stability.
+    n_samples : int, default=5
+        Number of Hutchinson samples for diagonal estimation.
+    """
+
     def __init__(
         self,
         params: Params,
@@ -72,6 +118,30 @@ class AdaHessian(AdaHessianMixin, NumericalOptimizer):
 
 
 class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
+    """
+    AdaHessian with line search.
+
+    Same as AdaHessian, but instead of a fixed learning rate it performs a
+    line search to determine the step length.
+    
+    Works well in practice, but theoretically it's not well supported.
+
+    Parameters
+    ----------
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning-rate initialization method.
+    beta1, beta2, k, eps, n_samples : same as in AdaHessian.
+    c1, c2, tau, max_iter, tol : line-search parameters.
+    line_search_method : str, default="backtrack"
+        Line-search method.
+    line_search_cond : str, default="armijo"
+        Line-search condition.
+    """
+
     def __init__(
         self,
         params: Params,

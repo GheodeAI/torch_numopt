@@ -14,5 +14,5 @@ Implementation of numerical optimization methods for Neural Networks.
    :caption: Contents:
 
    API reference <api_reference>
-   Documentation <torch_numopt>
+   Documentation <auto/torch_numopt>
 

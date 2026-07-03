@@ -111,7 +111,7 @@ def diag_step_dir(diag_grad):
 
 def test_backtracking_armijo(scalar_obj, scalar_params, scalar_grad, scalar_step_dir):
     ls = BacktrackingLineSearch(condition="armijo", c1=1e-4, tau=0.5)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
     # new_params = x + lr * step_dir = 0 + lr*3
     x_new = new_params[0].item()
     # Check that Armijo condition holds: f(x+lr*d) <= f(x) + c1*lr*grad_dot_d
@@ -128,7 +128,7 @@ def test_backtracking_armijo(scalar_obj, scalar_params, scalar_grad, scalar_step
 
 def test_backtracking_wolfe(scalar_obj, scalar_params, scalar_grad, scalar_step_dir):
     ls = BacktrackingLineSearch(condition="wolfe", c1=1e-4, c2=0.9, tau=0.5)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
     loss = scalar_obj.loss(*scalar_params)
     new_loss = scalar_obj.loss(*new_params)
     grad_dot_d = scalar_grad[0].item() * scalar_step_dir[0].item()
@@ -144,7 +144,7 @@ def test_backtracking_wolfe(scalar_obj, scalar_params, scalar_grad, scalar_step_
 
 def test_backtracking_strong_wolfe(scalar_obj, scalar_params, scalar_grad, scalar_step_dir):
     ls = BacktrackingLineSearch(condition="strong-wolfe", c1=1e-4, c2=0.5, tau=0.5)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
     loss = scalar_obj.loss(*scalar_params)
     new_loss = scalar_obj.loss(*new_params)
     grad_dot_d = scalar_grad[0].item() * scalar_step_dir[0].item()
@@ -160,7 +160,7 @@ def test_backtracking_strong_wolfe(scalar_obj, scalar_params, scalar_grad, scala
 
 def test_backtracking_goldstein(scalar_obj, scalar_params, scalar_grad, scalar_step_dir):
     ls = BacktrackingLineSearch(condition="goldstein", c1=0.1, tau=0.5)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
     loss = scalar_obj.loss(*scalar_params)
     new_loss = scalar_obj.loss(*new_params)
     grad_dot_d = scalar_grad[0].item() * scalar_step_dir[0].item()
@@ -172,7 +172,7 @@ def test_backtracking_goldstein(scalar_obj, scalar_params, scalar_grad, scalar_s
 
 def test_backtracking_greedy(scalar_obj, scalar_params, scalar_grad, scalar_step_dir):
     ls = BacktrackingLineSearch(condition="greedy", tau=0.5)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
     loss = scalar_obj.loss(*scalar_params)
     new_loss = scalar_obj.loss(*new_params)
     # Greedy: new_loss <= loss
@@ -182,7 +182,7 @@ def test_backtracking_greedy(scalar_obj, scalar_params, scalar_grad, scalar_step
 def test_backtracking_max_iter(scalar_obj, scalar_params, scalar_grad, scalar_step_dir):
     # Set tau very small so it takes many iterations, but max_iter limits
     ls = BacktrackingLineSearch(condition="armijo", c1=1e-4, tau=0.9, max_iter=2)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1e-6, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1e-6, objective=scalar_obj)
     # It should have performed 2 iterations (or fewer if condition satisfied early)
     # Check that lr is not too small
     assert lr > 0
@@ -198,7 +198,7 @@ def test_backtracking_max_iter(scalar_obj, scalar_params, scalar_grad, scalar_st
 
 def test_interpolation_armijo(scalar_obj, scalar_params, scalar_grad, scalar_step_dir):
     ls = InterpolationLineSearch(condition="armijo", c1=1e-4, tau=0.5)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
     loss = scalar_obj.loss(*scalar_params)
     new_loss = scalar_obj.loss(*new_params)
     grad_dot_d = scalar_grad[0].item() * scalar_step_dir[0].item()
@@ -209,7 +209,7 @@ def test_interpolation_armijo(scalar_obj, scalar_params, scalar_grad, scalar_ste
 
 def test_interpolation_wolfe(scalar_obj, scalar_params, scalar_grad, scalar_step_dir):
     ls = InterpolationLineSearch(condition="wolfe", c1=1e-4, c2=0.9, tau=0.5)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
     loss = scalar_obj.loss(*scalar_params)
     new_loss = scalar_obj.loss(*new_params)
     grad_dot_d = scalar_grad[0].item() * scalar_step_dir[0].item()
@@ -221,7 +221,7 @@ def test_interpolation_wolfe(scalar_obj, scalar_params, scalar_grad, scalar_step
 
 def test_interpolation_strong_wolfe(scalar_obj, scalar_params, scalar_grad, scalar_step_dir):
     ls = InterpolationLineSearch(condition="strong-wolfe", c1=1e-4, c2=0.5, tau=0.5)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
     loss = scalar_obj.loss(*scalar_params)
     new_loss = scalar_obj.loss(*new_params)
     grad_dot_d = scalar_grad[0].item() * scalar_step_dir[0].item()
@@ -240,7 +240,7 @@ def test_bisection_basic(scalar_obj, scalar_params, scalar_grad, scalar_step_dir
     # Bisection finds the minimum along the direction by setting derivative to zero.
     # For our quadratic, the derivative along d is zero at the exact minimizer.
     ls = BisectionLineSearch(tau=0.5, tol=1e-8, max_iter=100)
-    new_params, lr = ls.line_search(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
+    new_params, lr = ls.find_step_size(scalar_params, scalar_step_dir, scalar_grad, lr_init=1.0, objective=scalar_obj)
     # The exact optimal step is 0.5
     assert abs(lr - 0.5) < 1e-6
     # Check that derivative is near zero
@@ -257,7 +257,7 @@ def test_bisection_2d(diag_obj, diag_params, diag_grad, diag_step_dir):
     # = 0.5*(2t^2 + 4t^2) - (t + 4t) = 0.5*6t^2 -5t = 3t^2 -5t.
     # Minimum at t = 5/(6) ≈ 0.8333.
     ls = BisectionLineSearch(tol=1e-8, max_iter=100)
-    new_params, lr = ls.line_search(diag_params, diag_step_dir, diag_grad, lr_init=1.0, objective=diag_obj)
+    new_params, lr = ls.find_step_size(diag_params, diag_step_dir, diag_grad, lr_init=1.0, objective=diag_obj)
     assert abs(lr - 5 / 6) < 1e-6
     # Check derivative near zero
     new_loss = diag_obj.loss(*new_params)
