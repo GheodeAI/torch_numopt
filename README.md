@@ -39,8 +39,8 @@ pip install torch-numopt
 or install from source:
 
 ```bash
-git clone https://github.com/yourusername/torch-numopt.git
-cd torch-numopt
+git clone https://github.com/GheodeAI/torch_numopt.git
+cd torch_numopt
 pip install -e .
 ```
 
@@ -138,7 +138,7 @@ The system automatically falls back to a more stable solver when numerical issue
 
 ## Acknowledgements
 
-This package draws inspiration from the [torchimize](https://github.com/hahnec/torchimize) library. We thank the authors of that project for their pioneering work, in particular their Gauss-Newton and Levenberg-Marquardt implementation.
+This package draws inspiration from the [torchimize](https://github.com/hahnec/torchimize) library. We thank the authors of that project, in particular for their Gauss-Newton and Levenberg-Marquardt implementation.
 
 ## License
 
