@@ -1,25 +1,15 @@
 API reference
 =============
 
-Base Optimization classes
--------------------------
+This section provides detailed documentation for all the components of the library.
 
-.. csv-table::
-   :header: "Class", "Description"
+The API is organised into two main parts:
 
-   ":py:class:`~torch_numopt.CustomOptimizer`", "Base optimization class. Optimization with inputs x, y, and loss function"
-   ":py:class:`~torch_numopt.LineSearchOptimizer`", "Class implementing line search methods for optimizaton."
-   ":py:class:`~torch_numopt.SecondOrderOptimizer`", "Class implementing methods for calculating and formatting the hessian matrix for optimization."
+1. :doc:`Available algorithms <api_reference.available_algorithms>`
+   – Ready-to-use optimizers grouped by step-selection strategy (fixed step, line search, trust region).
 
-Available algorithms
---------------------
+2. :doc:`Custom optimizers <api_reference.building_algorithms>`
+   – A guide to assembling your own optimizers from the library's building blocks: curvature estimators,
+   line-search solvers, trust-region solvers, and linear solvers.
 
-.. csv-table::
-   :header: "Algorithm", "Description"
-
-   ":py:class:`~torch_numopt.GradientDescentLS`", "Vanilla gradient descent with line search."
-   ":py:class:`~torch_numopt.ConjugateGradientLS`", "Conjugate gradient descent with line search"
-   ":py:class:`~torch_numopt.NewtonLS`", "Newton's method for optimization with line search"
-   ":py:class:`~torch_numopt.GaussNewtonLS`", "Gauss-Newton algorithm with line search."
-   ":py:class:`~torch_numopt.LevenbergMarquardtLS`", "Levenberg-Marquardt algorithm with line search."
-   ":py:class:`~torch_numopt.AdaHessian`", "AdaHessian algorithm."
+For a high-level overview of the library and its design, see the :doc:`/index`.

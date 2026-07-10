@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
             # parameter update step based on optimizer
             opt.step(b_x, b_y, loss_fn)
-            opt.update(loss)
+            opt.update_params(loss)
 
             all_loss[epoch] += loss
         end = time.perf_counter()
