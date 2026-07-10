@@ -1,17 +1,21 @@
+"""
+Levenberg-Marquardt optimizer (trust-region variant).
+
+The Levenberg-Marquardt algorithm interpolates between the Gauss-Newton method
+and gradient descent by adaptively adjusting a damping parameter (mu). It is
+particularly effective for nonlinear least-squares problems and is implemented
+here as a trust-region optimizer with Fletcher's damping strategy.
+"""
+
 from __future__ import annotations
 import logging
 import torch
 
-from torch_numopt.objective import ObjectiveFunction
-from torch_numopt.utils.param_operations import Params, param_detach, param_dot, param_neg, param_norm, param_scaled_add
-from torch_numopt.utils.utils import torch_to_float
+from ..utils import Params, param_detach, param_dot, param_neg, param_norm, param_scaled_add, torch_to_float
+from ..objective import ObjectiveFunction
+from ..numerical_optimizer import TrustRegionOptimizer
+from ..curvature import GaussNewtonBlockApproximation, GaussNewtonApproximation
 
-from ..line_search import create_line_search_solver
-from ..numerical_optimizer import NumericalOptimizer, LineSearchOptimizer, TrustRegionOptimizer
-from ..curvature import GaussNewtonBlockApproximation
-
-# from ..utils import Params, param_dot, param_scalar_prod, param_norm, param_copy, param_diff
-from ..utils import *
 from ..trust_region import CauchyPointTRSolver
 
 logger = logging.getLogger(__name__)
@@ -19,57 +23,52 @@ logger = logging.getLogger(__name__)
 
 class LevenbergMarquardt(TrustRegionOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
-    and the matlab implementation of 'learnlm' https://es.mathworks.com/help/deeplearning/ref/trainlm.html#d126e69092
+    Levenberg-Marquardt optimizer (trust-region variant).
+
+    This optimizer solves the least-squares problem by adaptively combining
+    Gauss-Newton and gradient descent via a damping parameter (mu). The step is
+    computed by solving (JᵀJ + mu I) p = -g. The damping is adjusted based on
+    the ratio rho.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    mu: float
-        Initial value for the coefficient used when adding a diagonal matrix to the Hessian approximation.
-    mu_dec: float
-        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
-    mu_max: float
-        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    use_diagonal: bool
-        Whether to use the diagonal of the Hessian approximation instead of an identity matrix to adjust the Hessian matrix.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
+    params : Params
+        Parameter tensors.
+    mu : float, default=1e-2
+        Initial damping parameter.
+    mu_dec : float, default=0.1
+        Factor by which mu is multiplied when the step is successful (reduction).
+    mu_max : float, default=1e10
+        Maximum allowed damping.
+    accept_tol : float, default=0
+        Threshold for rho to accept the step.
+    damping : str, default="fletcher"
+        Damping strategy for the curvature estimator (e.g., "identity" or "fletcher").
+    solver : str, default="cholesky"
+        Linear solver for the system.
     """
 
     def __init__(
         self,
         params: Params,
-        mu: float = 1e-2,
+        mu: float = 1,
         mu_dec: float = 0.1,
         mu_max: float = 1e10,
-        accept_tol=0,
+        accept_tol: float = 0,
         damping: str = "fletcher",
         solver: str = "cholesky",
+        block_hessian: bool = True,
     ):
-        assert damping is not None
+        assert damping is not None, "Levenberg-Marquardt must use a damping strategy."
+        if block_hessian:
+            curvature_estimator = GaussNewtonBlockApproximation(damping=damping, mu=mu)
+        else:
+            curvature_estimator = GaussNewtonApproximation(damping=damping, mu=mu)
+
         super().__init__(
             params,
             trust_region=CauchyPointTRSolver(curvature_estimator=GaussNewtonBlockApproximation(damping=None)),
-            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
+            curvature_estimator=curvature_estimator,
             accept_tol=accept_tol,
         )
         self.solver = solver
@@ -77,10 +76,6 @@ class LevenbergMarquardt(TrustRegionOptimizer):
         self.mu_max = mu_max
 
     def new_model_radius(self, objective, radius, radius_init, loss, params, grad_params, new_loss, step_dir):
-        """
-        Update the model radius from the loss in the current iteration.
-        """
-
         eps = torch.finfo(loss.dtype).eps
 
         m_0 = self.trust_region.model(objective, 0, params, loss, grad_params)
@@ -98,18 +93,6 @@ class LevenbergMarquardt(TrustRegionOptimizer):
         return rho, radius
 
     def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):
-        """
-        Updates the parameters of the network using a direction and a step length.
-
-        Parameters
-        ----------
-
-        lr: float
-        objective: ObjectiveFunction
-        params: Params
-        grad_params: Params
-        """
-
         prev_loss = objective.loss(*params)
         model_radius = self.curvature_estimator.mu
 

@@ -1,4 +1,12 @@
-""" """
+"""
+torch_numopt: Second-order optimization algorithms for PyTorch.
+
+This package provides a collection of numerical optimizers (Newton, Gauss-Newton,
+Levenberg-Marquardt, conjugate gradient, L-BFGS, AdaHessian, etc.) that utilize
+exact or approximate curvature information. It also includes line-search and
+trust-region frameworks, curvature estimators (Hessian, Gauss-Newton, diagonal
+approximations), and a variety of linear solvers.
+"""
 
 from .objective import ObjectiveFunction, SupervisedLearningObjective
 from .curvature_estimator import CurvatureEstimator
@@ -16,20 +24,24 @@ from . import utils
 from .utils import *
 
 __all__ = [
+    "ObjectiveFunction",
+    "SupervisedLearningObjective",
     "CurvatureEstimator",
     "NumericalOptimizer",
     "LineSearchOptimizer",
     "TrustRegionOptimizer",
-    "TrustRegionSolver",
-    "CauchyPointTRSolver",
-    "DoglegTRSolver",
     "LineSearchSolver",
     "BacktrackingLineSearch",
     "InterpolationLineSearch",
     "BisectionLineSearch",
+    "TrustRegionSolver",
+    "CauchyPointTRSolver",
+    "DoglegTRSolver",
     "create_line_search_solver",
     "create_trust_region_solver",
     *algorithms.__all__,
     *curvature.__all__,
     *utils.__all__,
 ]
+
+__version__ = "1.0.0"

@@ -1,4 +1,10 @@
-""" """
+"""
+Line-search algorithms for step-length determination.
+
+This module provides various line-search strategies: backtracking, interpolation,
+and bisection. Each solver implements a specific method and can be combined with
+different stopping conditions (Armijo, Wolfe, Goldstein, etc.).
+"""
 
 from abc import ABC, abstractmethod
 import logging
@@ -12,7 +18,35 @@ ls_methods = {"backtrack", "interpolate", "bisect"}
 ls_conditions = {"greedy", "armijo", "wolfe", "strong-wolfe", "goldstein"}
 
 
-def create_line_search_solver(method, condition, c1=1e-4, c2=0.9, tau=0.1, max_iter=20, tol=1e-8):
+def create_line_search_solver(
+    method: str, condition: str, c1: float = 1e-4, c2: float = 0.9, tau: float = 0.1, max_iter: int = 20, tol: float = 1e-8
+):
+    """
+    Factory function to instantiate a line-search solver.
+
+    Parameters
+    ----------
+    method : str
+        One of ``"backtrack"``, ``"interpolate"``, ``"bisect"``.
+    condition : str
+        Stopping condition: ``"greedy"``, ``"armijo"``, ``"wolfe"``,
+        ``"strong-wolfe"``, ``"goldstein"``.
+    c1 : float, default=1e-4
+        Sufficient decrease parameter (Armijo).
+    c2 : float, default=0.9
+        Curvature condition parameter (Wolfe).
+    tau : float, default=0.1
+        Step-size reduction factor for backtracking.
+    max_iter : int, default=20
+        Maximum number of iterations.
+    tol : float, default=1e-8
+        Tolerance for stopping (e.g., minimum step size).
+
+    Returns
+    -------
+    LineSearchSolver
+        Instance of the requested solver.
+    """
     match method:
         case "backtrack":
             line_search = BacktrackingLineSearch(condition=condition, c1=c1, c2=c2, tau=tau, max_iter=max_iter, tol=tol)
@@ -30,6 +64,28 @@ def create_line_search_solver(method, condition, c1=1e-4, c2=0.9, tau=0.1, max_i
 
 
 class LineSearchSolver(ABC):
+    """
+    Abstract base class for line-search solvers.
+
+    Subclasses must implement the ``line_search`` method to find an acceptable
+    step length.
+
+    Parameters
+    ----------
+    condition : str, default="armijo"
+        Stopping condition (see above).
+    c1 : float, default=1e-4
+        Sufficient decrease parameter.
+    c2 : float, default=0.9
+        Curvature condition parameter.
+    tau : float, default=0.1
+        Step reduction factor.
+    max_iter : int, default=20
+        Maximum iterations.
+    tol : float, default=1e-8
+        Tolerance (e.g., minimum step).
+    """
+
     def __init__(
         self,
         condition: str = "armijo",
@@ -62,21 +118,29 @@ class LineSearchSolver(ABC):
         grad_params: Params,
     ):
         """
-        Compute one of the stopping conditions for line search methods.
+        Check if the current step satisfies the chosen stopping condition.
 
         Parameters
         ----------
-        params: Params
-        new_params: Params
-        step_dir: Params
-        lr: float
-        loss: torch.Tensor
-        new_loss: torch.Tensor
-        grad: Params
+        params : Params
+            Current parameters.
+        new_params : Params
+            Candidate parameters at step length `lr`.
+        step_dir : Params
+            Search direction.
+        lr : float
+            Step length.
+        loss : torch.Tensor
+            Loss at `params`.
+        new_loss : torch.Tensor
+            Loss at `new_params`.
+        grad_params : Params
+            Gradient at `params`.
 
         Returns
         -------
-        accepted: bool
+        bool
+            ``True`` if the step is acceptable.
         """
 
         if not torch.isfinite(new_loss).all():
@@ -126,25 +190,9 @@ class LineSearchSolver(ABC):
 
         return accepted
 
-    def __call__(self, params, step_dir, grad_params, lr_init, objective):
-        return self.line_search(params, step_dir, grad_params, lr_init, objective)
-
     @abstractmethod
     @torch.enable_grad()
-    def line_search(
-        self,
-        params: Params,
-        step_dir: Params,
-        grad_params: Params,
-        lr_init: float,
-        objective: ObjectiveFunction,
-    ):
-        """"""
-
-
-class BacktrackingLineSearch(LineSearchSolver):
-    @torch.enable_grad()
-    def line_search(
+    def find_step_size(
         self,
         params: Params,
         step_dir: Params,
@@ -153,22 +201,45 @@ class BacktrackingLineSearch(LineSearchSolver):
         objective: ObjectiveFunction,
     ):
         """
-        Perform backtracking line search.
+        Perform the line search.
 
         Parameters
         ----------
-
-        params: Params
-        step_dir: Params
-        grad: Params
-        lr_init: float
-        objective: ObjectiveFunction
+        params : Params
+            Current parameters.
+        step_dir : Params
+            Search direction.
+        grad_params : Params
+            Gradient at current point.
+        lr_init : float
+            Initial step length.
+        objective : ObjectiveFunction
+            Objective function.
 
         Returns
         -------
-        new_params: Params
+        tuple (new_params, lr)
+            The updated parameters and the chosen step length.
         """
 
+
+class BacktrackingLineSearch(LineSearchSolver):
+    """
+    Backtracking line search with step reduction.
+
+    Starting from `lr_init`, the step size is repeatedly multiplied by `tau`
+    until the chosen condition is satisfied or `max_iter` is reached.
+    """
+
+    @torch.enable_grad()
+    def find_step_size(
+        self,
+        params: Params,
+        step_dir: Params,
+        grad_params: Params,
+        lr_init: float,
+        objective: ObjectiveFunction,
+    ):
         lr = lr_init
 
         loss = objective.loss(*params)
@@ -202,8 +273,15 @@ class BacktrackingLineSearch(LineSearchSolver):
 
 
 class InterpolationLineSearch(LineSearchSolver):
+    """
+    Line search using quadratic/cubic interpolation.
+
+    Uses the function and derivative values at two points to fit a polynomial
+    and estimate the optimum step length.
+    """
+
     @torch.enable_grad()
-    def line_search(
+    def find_step_size(
         self,
         params: Params,
         step_dir: Params,
@@ -211,18 +289,6 @@ class InterpolationLineSearch(LineSearchSolver):
         lr_init: float,
         objective: ObjectiveFunction,
     ):
-        """
-
-        Parameters
-        ----------
-
-        params: Params
-        step_dir: Params
-        grad: Params
-        lr_init: float
-        eval_model: Callable
-        """
-
         dir_deriv = param_dot(grad_params, step_dir)
         device = dir_deriv.device
         dtype = dir_deriv.dtype
@@ -294,12 +360,19 @@ class InterpolationLineSearch(LineSearchSolver):
 
 
 class BisectionLineSearch(LineSearchSolver):
+    """
+    Bisection (binary search) line search.
+
+    It maintains an interval containing the optimal step and narrows it
+    by checking the derivative sign.
+    """
+
     @torch.enable_grad()
-    def line_search(self, params, step_dir, grad_params, lr_init, objective):
+    def find_step_size(self, params: Params, step_dir: Params, grad_params: Params, lr_init: float, objective: ObjectiveFunction):
         loss = objective.loss(*params)
         a_min = 0
         a_max = lr_init
-            
+
         lr = a_max
         new_params = param_scaled_add(params, step_dir, scale=lr)
         new_loss = objective.loss(*new_params)
@@ -315,7 +388,7 @@ class BisectionLineSearch(LineSearchSolver):
             a_max = lr
         else:
             a_min = lr
-        
+
         n_iters = 0
         for _ in range(self.max_iter):
             lr = 0.5 * (a_max + a_min)
@@ -334,10 +407,10 @@ class BisectionLineSearch(LineSearchSolver):
                 a_max = lr
             else:
                 a_min = lr
-            
+
             if a_max - a_min <= self.tol:
                 break
-            
+
             n_iters += 1
 
         if logger.isEnabledFor(logging.INFO):

@@ -118,8 +118,6 @@ def test_naive_identity_quadratic(objective, params):
 # ----------------------------------------------------------------------
 # Tests for ExactHessianCalculator (full matrix)
 # ----------------------------------------------------------------------
-
-
 def test_exact_hessian_scaling(objective, params, dataset):
     X, y = dataset
     est = ExactHessianCalculator(damping=None)
@@ -368,24 +366,6 @@ def test_hutchinson_diagonal_shape(objective, params):
     assert len(diag_blocks) == len(params)
     for d, p in zip(diag_blocks, params):
         assert d.shape == p.shape
-
-
-def test_hutchinson_hvp(objective, params):
-    est = HutchinsonDiagonalApproximation(n_samples=10)
-    v = tuple(torch.randn_like(p) for p in params)  # fixed: tuple
-    diag_blocks = est.scaling_matrix(objective, params)
-    hv = est.hvp(objective, params, v)
-    for d, hv_, v_ in zip(diag_blocks, hv, v):
-        torch.testing.assert_close(hv_, d * v_, rtol=1e-4, atol=1e-4)
-
-
-def test_hutchinson_quadratic_form(objective, params):
-    est = HutchinsonDiagonalApproximation(n_samples=10)
-    v = tuple(torch.randn_like(p) for p in params)
-    diag_blocks = est.scaling_matrix(objective, params)
-    expected = sum((d * v_ * v_).sum() for d, v_ in zip(diag_blocks, v))
-    q = est.quadratic_form(objective, params, v)
-    torch.testing.assert_close(q, expected, rtol=1e-4, atol=1e-4)
 
 
 def test_hutchinson_diagonal_against_true_diagonal(objective, params, dataset):

@@ -98,7 +98,7 @@ class FixedStepLineSearch(LineSearchSolver):
         super().__init__()
         self.fixed_lr = fixed_lr
 
-    def line_search(self, params, step_dir, grad_params, lr_init, objective):
+    def find_step_size(self, params, step_dir, grad_params, lr_init, objective):
         lr = self.fixed_lr
         new_params = param_add(params, param_scalar_prod(lr, step_dir))
         return new_params, lr
@@ -121,8 +121,7 @@ class FixedStepTrustRegion(TrustRegionSolver):
             step = param_scalar_prod(-radius / g_norm, g)
         else:
             step = self.step_dir
-        new_params = param_add(params, step)
-        return new_params, step
+        return step  # only the step direction, not a tuple
 
 
 # ----------------------------------------------------------------------
@@ -182,16 +181,12 @@ def test_apply_gradients_and_update(scalar_obj, scalar_params, scalar_grad, exac
     opt.apply_gradients(scalar_obj, scalar_params, scalar_grad)
     loss_new = scalar_obj.loss(*scalar_params)
     assert loss_new < loss_old
-    assert opt.curr_lr == 0.5
-    assert opt.curr_loss == loss_new
-    assert opt.curr_params is not None
-    assert opt.curr_grad is not None
-
-    opt.update_params()
-    assert opt.prev_lr == 0.5
+    # After apply_gradients, prev_* are updated with the new step's values
+    assert opt.prev_lr == 0.5  # kept from before
     assert opt.prev_loss == loss_new
     assert opt.prev_params is not None
-    assert opt.prev_params[0] is not opt.curr_params[0]
+    # prev_params should be detached clones of new parameters
+    assert torch.allclose(opt.prev_params[0], scalar_params[0])
 
 
 def test_step_full_iteration(scalar_obj, scalar_params, scalar_grad, exact_curvature):
@@ -211,8 +206,9 @@ def test_step_full_iteration(scalar_obj, scalar_params, scalar_grad, exact_curva
     opt.step(scalar_obj)
     loss1 = scalar_obj.loss(*scalar_params)
     assert loss1 < loss0
-    assert opt.prev_lr == opt.curr_lr
-    assert opt.prev_loss == opt.curr_loss
+    assert opt.prev_lr == 0.5  # kept
+    # prev_loss should be updated to new loss after step
+    assert opt.prev_loss == loss1
 
 
 # ----------------------------------------------------------------------
@@ -233,7 +229,7 @@ def test_line_search_optimizer_uses_line_search(scalar_obj, scalar_params, scala
     opt.apply_gradients(scalar_obj, scalar_params, scalar_grad)
     loss_new = scalar_obj.loss(*scalar_params)
     assert loss_new < loss_old
-    assert opt.curr_lr == fixed_lr
+    assert opt.prev_lr == fixed_lr  # the line search returned this lr
 
 
 def test_line_search_optimizer_step_calls_line_search(scalar_obj, scalar_params, exact_curvature):
@@ -242,9 +238,9 @@ def test_line_search_optimizer_step_calls_line_search(scalar_obj, scalar_params,
             super().__init__(fixed_lr=0.3)
             self.called = False
 
-        def line_search(self, params, step_dir, grad_params, lr_init, objective):
+        def find_step_size(self, params, step_dir, grad_params, lr_init, objective):
             self.called = True
-            return super().line_search(params, step_dir, grad_params, lr_init, objective)
+            return super().find_step_size(params, step_dir, grad_params, lr_init, objective)
 
     ls = RecordingLineSearch()
     opt = LineSearchOptimizer(params=scalar_params, curvature_estimator=exact_curvature, line_search=ls, lr_init=1.0, lr_method=None)
@@ -270,27 +266,32 @@ def test_trust_region_optimizer_increases_radius(scalar_obj, scalar_params, scal
     expected_step = (torch.tensor([1.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=exact_curvature, step_dir=expected_step)
 
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=10.0, accept_tol=0.1, solver="solve")  # cap for increase
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=10.0, accept_tol=0.1)
+    # For the radius increase logic, we need curvature_estimator set (though not used by tr in this mock)
     opt.curvature_estimator = exact_curvature
     # Set previous radius to 1.0 (so current radius is 1.0)
     opt.prev_lr = 1.0
+
+    # Reset parameter to zero
+    with torch.no_grad():
+        scalar_params[0].zero_()
 
     loss0 = scalar_obj.loss(*scalar_params)
     opt.apply_gradients(scalar_obj, scalar_params, scalar_grad)
     loss1 = scalar_obj.loss(*scalar_params)
     assert loss1 < loss0
     # rho=1, step norm=1, radius=1 -> increase to min(2*1, 10) = 2
-    assert opt.curr_lr == 2.0
+    assert opt.prev_lr == 2.0
 
 
 def test_trust_region_optimizer_decreases_radius(scalar_obj, scalar_params, scalar_grad, naive_curvature):
     """Radius should decrease when rho<0.25."""
     # Use a step that gives a poor model fit (large step with identity curvature)
-    # With identity, model predicts a decrease but actual loss increases -> rho negative, so <0.25
+    # With identity, model predicts a large decrease but actual loss increases -> rho negative, so <0.25
     bad_step = (torch.tensor([5.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=naive_curvature, step_dir=bad_step)
 
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=2.0, accept_tol=0.1, solver="solve")
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=2.0, accept_tol=0.1)
     opt.curvature_estimator = naive_curvature
     # Set previous radius to 2.0 (same as init)
     opt.prev_lr = 2.0
@@ -302,14 +303,14 @@ def test_trust_region_optimizer_decreases_radius(scalar_obj, scalar_params, scal
     loss0 = scalar_obj.loss(*scalar_params)
     opt.apply_gradients(scalar_obj, scalar_params, scalar_grad)
     # Since rho<0.25, radius should be multiplied by 0.25: 2.0 * 0.25 = 0.5
-    assert opt.curr_lr == 0.5
+    assert opt.prev_lr == 0.5
 
 
 def test_trust_region_accepts_good_step(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     """A step with rho>accept_tol should be accepted."""
     good_step = (torch.tensor([1.0], dtype=torch.float64),)  # gives decrease
     tr = FixedStepTrustRegion(curvature_estimator=exact_curvature, step_dir=good_step)
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1, solver="solve")
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1)
     opt.curvature_estimator = exact_curvature
     # Reset params to zero
     with torch.no_grad():
@@ -319,8 +320,8 @@ def test_trust_region_accepts_good_step(scalar_obj, scalar_params, scalar_grad, 
     opt.apply_gradients(scalar_obj, scalar_params, scalar_grad)
     loss1 = scalar_obj.loss(*scalar_params)
     assert loss1 < loss0  # step accepted, loss decreased
-    assert opt.curr_loss == loss1
-    # Parameters should have moved
+    assert opt.prev_loss == loss1
+    # Parameters should have moved (the step was applied)
     assert scalar_params[0].item() != 0.0
 
 
@@ -329,7 +330,7 @@ def test_trust_region_rejects_bad_step(scalar_obj, scalar_params, scalar_grad, n
     # Use a bad step that causes loss increase but model predicts decrease
     bad_step = (torch.tensor([5.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=naive_curvature, step_dir=bad_step)
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1, solver="solve")
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1)
     opt.curvature_estimator = naive_curvature
     # Reset params to zero
     with torch.no_grad():
@@ -339,4 +340,4 @@ def test_trust_region_rejects_bad_step(scalar_obj, scalar_params, scalar_grad, n
     opt.apply_gradients(scalar_obj, scalar_params, scalar_grad)
     # Step rejected, parameters stay at 0
     assert scalar_params[0].item() == 0.0
-    assert opt.curr_loss == loss0
+    assert opt.prev_loss == loss0  # loss unchanged

@@ -1,3 +1,11 @@
+"""
+Newton-type methods using exact Hessian (full or block).
+
+These optimizers compute the exact second-order derivatives and use them to
+form a quadratic model. They offer fast local convergence but may be expensive
+for large models.
+"""
+
 from __future__ import annotations
 import torch.nn as nn
 from ..line_search import create_line_search_solver
@@ -10,39 +18,26 @@ from ..solve_system import iterative_solver_set
 
 class Newton(NumericalOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+    Newton method with exact Hessian (full or block) and fixed learning rate.
+
+    Uses the exact Hessian (or block-diagonal) to compute the Newton step.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    damping: bool
-        Whether to use the diagonal of the Hessian matrix instead of an identity matrix to adjust the Hessian matrix.
-    mu: float
-        Initial value for the coefficient used when adding a diagonal matrix to the Hessian matrix.
-    mu_dec: float
-        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
-    mu_max: float
-        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning rate initialization method.
+    damping : str or None, default=None
+        Damping strategy.
+    mu : float, default=1
+        Damping coefficient.
+    solver : str, default="solve"
+        Linear solver for the system.
+    block_hessian : bool, default=True
+        If True, use block-diagonal Hessian.
     """
 
     def __init__(
@@ -71,39 +66,29 @@ class Newton(NumericalOptimizer):
 
 class NewtonLS(LineSearchOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+    Newton method with exact Hessian and line search.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    damping: bool
-        Whether to use the diagonal of the Hessian matrix instead of an identity matrix to adjust the Hessian matrix.
-    mu: float
-        Initial value for the coefficient used when adding a diagonal matrix to the Hessian matrix.
-    mu_dec: float
-        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
-    mu_max: float
-        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning rate initialization method.
+    c1, c2, tau, max_iter, tol : line search parameters.
+    damping : str or None, default=None
+        Damping strategy.
+    mu : float, default=1
+        Damping coefficient.
+    line_search_method : str, default="backtrack"
+        Line-search method.
+    line_search_cond : str, default="armijo"
+        Line-search condition.
+    solver : str, default="solve"
+        Linear solver.
+    block_hessian : bool, default=True
+        If True, use block-diagonal Hessian.
     """
 
     def __init__(
@@ -142,39 +127,26 @@ class NewtonLS(LineSearchOptimizer):
 
 class NewtonTR(TrustRegionOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+    Newton method with exact Hessian and trust region.
+
+    Uses a trust-region solver (e.g., exact or Steihaug-Toint) to compute the step.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    damping: bool
-        Whether to use the diagonal of the Hessian matrix instead of an identity matrix to adjust the Hessian matrix.
-    mu: float
-        Initial value for the coefficient used when adding a diagonal matrix to the Hessian matrix.
-    mu_dec: float
-        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
-    mu_max: float
-        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
+    params : Params
+        Parameter tensors.
+    radius_init : float, default=1.0
+        Initial trust-region radius.
+    trust_region_method : str, default="exact"
+        Trust-region solver method.
+    damping : str or None, default=None
+        Damping strategy.
+    mu : float, default=1
+        Damping coefficient.
+    solver : str, default="solve"
+        Linear solver for the system.
+    block_hessian : bool, default=False
+        If True, use block-diagonal Hessian.
     """
 
     def __init__(
@@ -186,6 +158,7 @@ class NewtonTR(TrustRegionOptimizer):
         mu: float = 1,
         solver: str = "solve",
         block_hessian: bool = False,
+        accept_tol: float = 1.0,
     ):
         if block_hessian:
             curvature_estimator = ExactBlockHessianCalculator(damping=damping, mu=mu)
@@ -197,44 +170,30 @@ class NewtonTR(TrustRegionOptimizer):
             trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=curvature_estimator, solver=solver),
             curvature_estimator=curvature_estimator,
             radius_init=radius_init,
+            accept_tol=accept_tol,
         )
 
 
 class NewtonCG(NumericalOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+    Newton-CG method (inexact Newton) using conjugate gradient to solve the linear system.
+
+    Uses exact Hessian but solves the system iteratively with CG.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    damping: bool
-        Whether to use the diagonal of the Hessian matrix instead of an identity matrix to adjust the Hessian matrix.
-    mu: float
-        Initial value for the coefficient used when adding a diagonal matrix to the Hessian matrix.
-    mu_dec: float
-        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
-    mu_max: float
-        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning rate initialization method.
+    damping : str or None, default=None
+        Damping strategy.
+    mu : float, default=1
+        Damping coefficient.
+    solver : str, default="cg-trunc"
+        Iterative solver (must be in iterative_solver_set).
     """
 
     def __init__(self, params: Params, lr_init: float = 1, lr_method: str | None = None, damping: str = None, mu: float = 1, solver="cg-trunc"):
@@ -251,39 +210,30 @@ class NewtonCG(NumericalOptimizer):
 
 class NewtonCGLS(LineSearchOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+    Newton-CG with line search.
+
+    Combines the iterative CG solution of the Newton system with a line search
+    to determine the step length.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    damping: bool
-        Whether to use the diagonal of the Hessian matrix instead of an identity matrix to adjust the Hessian matrix.
-    mu: float
-        Initial value for the coefficient used when adding a diagonal matrix to the Hessian matrix.
-    mu_dec: float
-        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
-    mu_max: float
-        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning-rate initialization method.
+    c1, c2, tau, max_iter, tol : line-search parameters.
+    damping : str or None, default=None
+        Damping strategy.
+    mu : float, default=1
+        Damping coefficient.
+    line_search_method : str, default="backtrack"
+        Line-search method.
+    line_search_cond : str, default="armijo"
+        Stopping condition.
+    solver : str, default="cg-trunc"
+        Iterative solver.
     """
 
     def __init__(
@@ -318,48 +268,25 @@ class NewtonCGLS(LineSearchOptimizer):
 
 class NewtonCGTR(TrustRegionOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
+    Newton-CG with trust region (Steihaug-Toint).
+
+    Uses the Steihaug-Toint CG-trust-region method, which solves the trust-region
+    subproblem iteratively with a CG approach that automatically handles negative
+    curvature and the trust-region boundary.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    damping: bool
-        Whether to use the diagonal of the Hessian matrix instead of an identity matrix to adjust the Hessian matrix.
-    mu: float
-        Initial value for the coefficient used when adding a diagonal matrix to the Hessian matrix.
-    mu_dec: float
-        Factor with which to decrease the coefficient of the diagonal matrix if the previous iteration didn't improve the model.
-    mu_max: float
-        Factor with which to increase the coefficient of the diagonal matrix if the previous iteration improved the model.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    solver: str
-        Method to use to invert the hessian.
-    batch_size: int
-        Size of the amount of data to use at a time to calculate the hessian matrix.
+    params : Params
+        Parameter tensors.
+    radius_init : float, default=1.0
+        Initial trust-region radius.
+    damping : str or None, default=None
+        Damping strategy.
+    mu : float, default=1
+        Damping coefficient.
     """
 
-    def __init__(
-        self,
-        params: Params,
-        radius_init: float = 1.0,
-        damping: str = None,
-        mu: float = 1,
-    ):
+    def __init__(self, params: Params, radius_init: float = 1.0, damping: str = None, mu: float = 1, accept_tol: float = 1.0):
         curvature_estimator = ExactHessianCalculator(damping=damping, mu=mu)
 
         super().__init__(
@@ -367,4 +294,5 @@ class NewtonCGTR(TrustRegionOptimizer):
             trust_region=SteihaugTointTRSolver(curvature_estimator),
             curvature_estimator=curvature_estimator,
             radius_init=radius_init,
+            accept_tol=accept_tol,
         )

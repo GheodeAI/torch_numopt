@@ -1,4 +1,11 @@
-""" """
+"""
+Base classes for numerical optimizers that use curvature information.
+
+This module provides the core ``NumericalOptimizer`` abstract class and its
+subclasses for line-search and trust-region strategies. It handles parameter
+updates, learning-rate initialization, and direction computation using a
+curvature estimator.
+"""
 
 from abc import ABC
 from typing import Iterable
@@ -22,15 +29,37 @@ lr_init_methods = {"scaled", "BB1", "BB2", "quadratic", "lipschitz", "keep", Non
 
 class NumericalOptimizer(Optimizer, ABC):
     """
-    Base class for gradient-based optimization algorithms with line search.
+    Base optimizer that uses a curvature estimator to compute a step direction.
+
+    Subclasses must implement the strategy for determining the step (line-search
+    or trust-region). This class handles storage of previous iterates and
+    learning-rate initialization methods.
 
     Parameters
     ----------
-    model: nn.Module
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
+    params : Params
+        Iterable of parameter tensors to optimize.
+    curvature_estimator : CurvatureEstimator
+        Object that provides the second-order (or approximate) curvature.
+    lr_init : float, default=1
+        Initial guess for the learning rate (or radius).
+    lr_method : str or None, default=None
+        Method for initializing the learning rate. Options:
+        - ``None``: use the supplied ``lr_init`` directly.
+        - ``"keep"``: reuse the previous learning rate.
+        - ``"scaled"``: scale based on gradient and step direction.
+        - ``"quadratic"``: use the curvature quadratic form.
+        - ``"interpolate"``: interpolate from previous loss change.
+        - ``"lipschitz"``: estimate Lipschitz constant.
+        - ``"BB1"``, ``"BB2"``: Barzilai-Borwein formulas.
+    lr_tol : float, default=1e-18
+        Tolerance for the learning rate; if the estimated rate falls below this,
+        it is replaced by the initial guess.
+    solver : str, default="solve"
+        Solver used to invert the curvature system (see :mod:`solve_system`).
+    fix_ascent : bool, default=True
+        If ``True``, detect and correct ascent directions (fall back to steepest
+        descent).
     """
 
     def __init__(
@@ -40,7 +69,7 @@ class NumericalOptimizer(Optimizer, ABC):
         lr_init: float = 1,
         lr_method: str | None = None,
         lr_tol: float = 1e-18,
-        solver="solve",
+        solver: str = "solve",
         fix_ascent: bool = True,
     ):
         assert lr_init > 0, "Learning rate must be a positive number."
@@ -69,15 +98,28 @@ class NumericalOptimizer(Optimizer, ABC):
 
     def initialize_lr(self, lr: float, grad_params: Params, step_dir: Params, objective: ObjectiveFunction, params: Params):
         """
+        Compute an initial learning rate for the current step.
+
+        Uses the stored information from previous iterations and the chosen
+        ``lr_method`` to propose a learning rate.
 
         Parameters
         ----------
+        lr : float
+            Base learning rate (fallback value).
+        grad_params : Params
+            Current gradient.
+        step_dir : Params
+            Proposed step direction (before scaling).
+        objective : ObjectiveFunction
+            Objective function (used for curvature evaluations).
+        params : Params
+            Current parameters.
 
-        lr: float
-        grad: Params
-        step_dir: Params
-        eval_model: Callable
-        params: Params
+        Returns
+        -------
+        float
+            Proposed initial learning rate.
         """
 
         if self.prev_lr is None:
@@ -131,20 +173,42 @@ class NumericalOptimizer(Optimizer, ABC):
 
         return new_lr
 
-    def get_step_direction(self, objective, grad_params):
+    def get_step_direction(self, objective: ObjectiveFunction, grad_params: Params):
+        """
+        Compute the un-scaled step direction by solving the system
+        ``H * p = -grad`` (or an approximation).
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function.
+        grad_params : Params
+            Current gradient.
+
+        Returns
+        -------
+        Params
+            Step direction (not yet multiplied by learning rate).
+        """
+
         return solve_system(self.curvature_estimator, objective, param_neg(grad_params), solver=self.solver)
 
     def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):
         """
-        Updates the parameters of the network using a direction and a step length.
+        Update parameters using the current gradient and curvature.
+
+        This method computes a step direction, determines a step length
+        (via learning-rate initialization or line-search/trust-region), and
+        applies the update. It also updates stored previous iterates.
 
         Parameters
         ----------
-
-        lr: float
-        eval_model: Callable
-        params: Params
-        grad_params: Params
+        objective : ObjectiveFunction
+            Objective function.
+        params : Params
+            Current parameters (in-place updated).
+        grad_params : Params
+            Current gradient.
         """
 
         step_dir = self.get_step_direction(objective, grad_params)
@@ -179,12 +243,16 @@ class NumericalOptimizer(Optimizer, ABC):
 
     def step(self, objective: ObjectiveFunction):
         """
-        Method to update the parameters of the Neural Network.
+        Perform one optimization step.
+
+        This is the main entry point called by the training loop. It calls
+        ``objective.closure()`` to compute the loss and gradients, then calls
+        ``apply_gradients`` for each parameter group.
 
         Parameters
         ----------
-
-        closure: ObjectiveFunction
+        objective : ObjectiveFunction
+            Objective function.
         """
 
         objective.closure()
@@ -197,6 +265,7 @@ class NumericalOptimizer(Optimizer, ABC):
                 if p.grad is not None:
                     params_with_grad.append(p)
                     gradient.append(p.grad)
+                    p.grad = None
 
             self.apply_gradients(
                 objective=objective,
@@ -207,20 +276,23 @@ class NumericalOptimizer(Optimizer, ABC):
 
 class LineSearchOptimizer(NumericalOptimizer, ABC):
     """
-    Base class for gradient-based optimization algorithms with line search.
+    Numerical optimizer that uses a line-search algorithm to determine the
+    step length.
 
     Parameters
     ----------
-    model: nn.Module
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    line_search_cond: str (optional)
-    line_search_method: str (optional)
-    c1: float (optional)
-    c2: float (optional)
-    tau: float (optional)
+    params : Params
+        Parameter tensors.
+    curvature_estimator : CurvatureEstimator
+        Curvature estimator.
+    line_search : LineSearchSolver
+        Line-search solver (backtracking, interpolation, etc.).
+    lr_init : float, default=1
+        Initial learning-rate guess.
+    lr_method : str or None, default=None
+        Learning-rate initialization method.
+    solver : str, default="solve"
+        Linear solver for the step direction.
     """
 
     def __init__(
@@ -230,24 +302,12 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
         line_search: LineSearchSolver,
         lr_init: float = 1,
         lr_method: str | None = None,
-        solver="solve",
+        solver: str = "solve",
     ):
         super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver)
         self.line_search = line_search
 
     def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):
-        """
-        Updates the parameters of the network using a direction and a step length.
-
-        Parameters
-        ----------
-
-        lr: float
-        eval_model: Callable
-        params: Params
-        grad_params: Params
-        """
-
         step_dir = self.get_step_direction(objective, grad_params)
         if self.fix_ascent and param_dot(grad_params, step_dir) > 0:
             logger.warning("Ascent direction detected, falling back to steepest descent. ")
@@ -255,7 +315,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
 
         lr_init = self.initialize_lr(self.lr_init, grad_params, step_dir, objective, params)
 
-        new_params, lr = self.line_search(params, step_dir, grad_params, lr_init, objective)
+        new_params, lr = self.line_search.find_step_size(params, step_dir, grad_params, lr_init, objective)
 
         with torch.no_grad():
             for param, new_param in zip(params, new_params):
@@ -283,30 +343,80 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
 
 class TrustRegionOptimizer(NumericalOptimizer, ABC):
     """
-    Base class for gradient-based optimization algorithms with line search.
+    Numerical optimizer that uses a trust-region strategy.
 
     Parameters
     ----------
-    model: nn.Module
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    line_search_cond: str (optional)
-    line_search_method: str (optional)
-    c1: float (optional)
-    c2: float (optional)
-    tau: float (optional)
+    params : Params
+        Parameter tensors.
+    trust_region : TrustRegionSolver
+        Trust-region solver that computes the step within a region.
+    radius_init : float, default=1.0
+        Initial trust-region radius.
+    accept_tol : float, default=0.1
+        Threshold for the ratio ``rho``; if ``rho > accept_tol`` the step is
+        accepted.
+    curvature_estimator : CurvatureEstimator, optional
+        Curvature estimator; Not directly used by the method, kept for compatibility. The
+        system will be solved internally by the trust region solver.
     """
 
-    def __init__(self, params: Params, trust_region: TrustRegionSolver, radius_init: float = 1.0, accept_tol: float = 0.1, curvature_estimator=None):
+    def __init__(
+        self,
+        params: Params,
+        trust_region: TrustRegionSolver,
+        radius_init: float = 1.0,
+        accept_tol: float = 0.1,
+        curvature_estimator: CurvatureEstimator = None,
+    ):
         super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=radius_init)
         self.trust_region = trust_region
         self.accept_tol = accept_tol
 
-    def new_model_radius(self, objective, radius, radius_init, loss, params, grad_params, new_loss, step_dir):
+    def new_model_radius(
+        self,
+        objective: ObjectiveFunction,
+        radius: float,
+        radius_init: float,
+        loss: float,
+        params: Params,
+        grad_params: Params,
+        new_loss: float,
+        step_dir: Params,
+    ):
         """
-        Update the model radius from the loss in the current iteration.
+        Update the trust-region radius based on the ratio rho.
+
+        The ratio rho measures the agreement between the actual reduction and
+        the predicted reduction. If rho is small, the model is poor, so shrink
+        the radius; if rho is large and the step is at the boundary, expand it.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function.
+        radius : float
+            Current trust-region radius.
+        radius_init : float
+            Initial radius (used as upper bound for expansion).
+        loss : torch.Tensor
+            Loss value at current parameters.
+        params : Params
+            Current parameters.
+        grad_params : Params
+            Gradient at current parameters.
+        new_loss : torch.Tensor
+            Loss value at proposed new parameters.
+        step_dir : Params
+            Proposed step direction.
+
+        Returns
+        -------
+        tuple (rho, new_radius)
+            rho : float
+                Ratio of actual to predicted reduction.
+            new_radius : float
+                Updated trust-region radius.
         """
 
         eps = torch.finfo(loss.dtype).eps
@@ -326,18 +436,6 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         return rho, radius
 
     def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):
-        """
-        Updates the parameters of the network using a direction and a step length.
-
-        Parameters
-        ----------
-
-        lr: float
-        objective: ObjectiveFunction
-        params: Params
-        grad_params: Params
-        """
-
         prev_loss = objective.loss(*params)
         model_radius = self.lr_init if self.prev_lr is None else self.prev_lr
 
@@ -366,10 +464,12 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
             self.prev_loss = new_loss
             self.prev_params = param_detach(new_params)
             self.prev_step_dir = param_detach(step_dir)
-            self.prev_grad = param_detach(grad_params)
         else:
             logging.info("Parameters were not accepted.")
+            self.prev_loss = prev_loss
+            self.prev_params = param_detach(params)
 
+        self.prev_grad = param_detach(grad_params)
         self.prev_lr_init = self.prev_lr
         self.prev_lr = torch_to_float(model_radius)
 

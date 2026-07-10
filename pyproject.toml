@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torch_numopt"
-version = "0.3.1"
+version = "1.0.0"
 description = "Classic numerical optimization methods for Pytorch neural networks"
 readme = "README.md"
 authors = [
@@ -27,7 +27,8 @@ dev = [
     "torchvision",
     "jupyter",
     "sphinx>=7.1.1",
-    "sphinx_material",
+    "pytest_sphinx_theme",
+    "numpydoc",
     "black[jupyter]",
     "pytest"
 ]

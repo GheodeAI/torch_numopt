@@ -1,4 +1,10 @@
-""" """
+"""
+Trust-region methods for optimization.
+
+Trust-region algorithms compute a step by solving a subproblem within a region
+where the quadratic model is trusted. This module provides Cauchy point,
+dogleg, exact (with Lagrange multiplier), and Steihaug-Toint (CG) solvers.
+"""
 
 from abc import ABC, abstractmethod
 import logging
@@ -27,6 +33,26 @@ tr_methods = {"cauchy", "dogleg", "exact"}
 
 
 def create_trust_region_solver(method, curvature_estimator, solver="solve", **kwargs):
+    """
+    Factory function for trust-region solvers.
+
+    Parameters
+    ----------
+    method : str
+        One of ``"cauchy"``, ``"dogleg"``, ``"exact"``, ``"steihaug-toint"``.
+    curvature_estimator : CurvatureEstimator
+        Curvature estimator used to build the quadratic model.
+    solver : str, default="solve"
+        Linear solver for exact/Steihaug-Toint methods.
+    **kwargs
+        Additional arguments passed to the solver constructor.
+
+    Returns
+    -------
+    TrustRegionSolver
+        Instance of the requested solver.
+    """
+
     match method:
         case "cauchy":
             trust_region_method = CauchyPointTRSolver(curvature_estimator=curvature_estimator, solver=solver)
@@ -47,13 +73,47 @@ def create_trust_region_solver(method, curvature_estimator, solver="solve", **kw
 
 
 class TrustRegionSolver(ABC):
+    """
+    Abstract base class for trust-region subproblem solvers.
+
+    Subclasses must implement the ``optimize_model`` method to compute a step
+    that approximately minimizes the quadratic model within a given radius.
+
+    Parameters
+    ----------
+    curvature_estimator : CurvatureEstimator
+        Estimator used for the quadratic model.
+    solver : str, default="solve"
+        Linear solver for steps that require solving a linear system.
+    """
+
     def __init__(self, curvature_estimator: CurvatureEstimator, solver: str = "solve"):
         self.curvature_estimator = curvature_estimator
         self.solver = solver
 
     def model(self, objective: ObjectiveFunction, step_dir: Params, params: Params, loss: float, grad_params: Params):
         """
-        Computes a quadratic approximation of the loss function
+        Evaluate the quadratic model at a given step.
+
+        The model is m(p) = f + gᵀp + ½ pᵀ H p.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function.
+        step_dir : Params
+            Candidate step p.
+        params : Params
+            Current parameters.
+        loss : float
+            Current loss value f.
+        grad_params : Params
+            Current gradient g.
+
+        Returns
+        -------
+        torch.Tensor
+            Model value m(p).
         """
 
         if isinstance(step_dir, int) and step_dir == 0:
@@ -66,10 +126,45 @@ class TrustRegionSolver(ABC):
 
     @abstractmethod
     def optimize_model(self, objective: ObjectiveFunction, params: Params, radius: float, grad_params: Params):
-        """ """
+        """
+        Solve the trust-region subproblem.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function.
+        params : Params
+            Current parameters.
+        radius : float
+            Trust-region radius.
+        grad_params : Params
+            Current gradient.
+
+        Returns
+        -------
+        Params
+            Step direction (p) that lies within the trust region.
+        """
 
 
 class ExactTRSolver(TrustRegionSolver):
+    """
+    Exact trust-region solver using the Lagrange multiplier method.
+
+    Solves the problem minimize m(p) subject to ||p|| ≤ Δ by finding the root
+    of the secular equation. This is computationally expensive as it requires
+    factorizing the matrix (H + λI).
+
+    Parameters
+    ----------
+    curvature_estimator : CurvatureEstimator
+        Curvature estimator.
+    iters : int, default=20
+        Maximum number of iterations for the root-finding.
+    tol : float, default=1e-12
+        Tolerance for the norm constraint.
+    """
+
     def __init__(self, curvature_estimator: CurvatureEstimator, iters: int = 20, tol=1e-12):
         super().__init__(curvature_estimator)
         self.iters = iters
@@ -134,6 +229,14 @@ class ExactTRSolver(TrustRegionSolver):
 
 
 class CauchyPointTRSolver(TrustRegionSolver):
+    """
+    Cauchy point trust-region solver.
+
+    The Cauchy point is the step that minimizes the quadratic model along the
+    steepest descent direction within the trust region. It is cheap and ensures
+    a minimum decrease.
+    """
+
     def optimize_model(self, objective: ObjectiveFunction, params: Params, radius: float, grad_params: Params):
         eps = torch.finfo(params[0].dtype).eps
 
@@ -152,6 +255,14 @@ class CauchyPointTRSolver(TrustRegionSolver):
 
 
 class DoglegTRSolver(TrustRegionSolver):
+    """
+    Dogleg trust-region solver.
+
+    Combines the steepest descent and Newton steps to form a piecewise linear
+    path. The step is the point on this path that reaches the trust-region
+    boundary.
+    """
+
     def optimize_model(self, objective: ObjectiveFunction, params: Params, radius: float, grad_params: Params):
         eps = torch.finfo(grad_params[0].dtype).eps
 
@@ -192,6 +303,27 @@ class DoglegTRSolver(TrustRegionSolver):
 
 
 class SteihaugTointTRSolver(TrustRegionSolver):
+    """
+    Steihaug-Toint conjugate gradient trust-region solver.
+
+    Uses the CG method to solve the trust-region subproblem, with early
+    termination when the boundary is reached or negative curvature is detected.
+    This is the recommended method for large-scale problems.
+
+    Parameters
+    ----------
+    curvature_estimator : CurvatureEstimator
+        Curvature estimator.
+    max_iter : int, default=20
+        Maximum CG iterations.
+    atol : float, default=1e-8
+        Absolute tolerance for residual norm.
+    tol : float, default=1e-4
+        Relative tolerance for residual norm.
+    min_iter : int, default=2
+        Minimum number of CG iterations before early stop.
+    """
+
     def __init__(self, curvature_estimator: CurvatureEstimator, max_iter=20, atol=1e-8, tol=1e-4, min_iter=2):
         super().__init__(curvature_estimator)
         self.max_iter = max_iter

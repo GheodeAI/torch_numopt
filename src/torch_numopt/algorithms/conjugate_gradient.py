@@ -1,3 +1,10 @@
+"""
+Non-linear conjugate gradient methods.
+
+These methods combine the gradient with previous search directions to achieve
+faster convergence than gradient descent, without requiring explicit curvature.
+"""
+
 from __future__ import annotations
 import torch
 import torch.nn as nn
@@ -9,6 +16,18 @@ from ..utils import param_dot, param_neg, param_scaled_add, param_diff, param_nu
 
 
 class ConjugateGradientMixin:
+    """
+    Mixin that provides the conjugate gradient direction computation.
+
+    Supports formulas: FR (Fletcher-Reeves), PR (Polak-Ribière), PRP+ (positive
+    version), HS (Hestenes-Stiefel), DY (Dai-Yuan).
+
+    Parameters
+    ----------
+    cg_method : str, default="PRP+"
+        Formula name.
+    """
+
     def __init__(self, *args, cg_method: str = "PRP+", **kwargs):
         super().__init__(*args, **kwargs)
         self.cg_method = cg_method
@@ -60,31 +79,21 @@ class ConjugateGradientMixin:
 
 class ConjugateGradient(ConjugateGradientMixin, NumericalOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
-    https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
-    https://arxiv.org/abs/2201.08568
+    Non-linear conjugate gradient optimizer with fixed learning rate.
+
+    Uses the Fletcher-Reeves, Polak-Ribière, etc. formulas to compute the
+    search direction without explicit curvature.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    cg_method: str
-        Formula used to calculate the conjugate gradient, options are "FR", "PR" and "PRP+".
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1.0
+        Initial learning rate.
+    lr_method : str or None, default="lipschitz"
+        Learning rate initialization method.
+    cg_method : str, default="PRP+"
+        Conjugate gradient formula: "FR", "PR", "PRP+", "HS", "DY".
     """
 
     def __init__(
@@ -99,36 +108,40 @@ class ConjugateGradient(ConjugateGradientMixin, NumericalOptimizer):
 
 class ConjugateGradientLS(ConjugateGradientMixin, LineSearchOptimizer):
     """
-    Heavily inspired by https://github.com/hahnec/torchimize/blob/master/torchimize/optimizer/gna_opt.py
-    https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
-    https://arxiv.org/abs/2201.08568
+    Non-linear conjugate gradient with line search.
+
+    Combines conjugate gradient direction with a line-search to determine
+    the step length.
 
     Parameters
     ----------
-
-    model: nn.Module
-        The model to be optimized
-    lr_init: float
-        Maximum learning rate in backtracking line search, if the learning rate is set as constant, this will be the value used.
-    lr_method: str
-        Method to use to initialize the learning rate before applying line search.
-    c1: float
-        Coefficient of the sufficient increase condition in backtracking line search.
-    c2: float
-        Coefficient used in the second condition for wolfe conditions.
-    tau: float
-        Factor used to reduce the step size in each step of the backtracking line search.
-    line_search_method: str
-        Method used for line search, options are "backtrack" and "constant".
-    line_search_cond: str
-        Condition to be used in backtracking line search, options are "armijo", "wolfe", "strong-wolfe" and "goldstein".
-    cg_method: str
-        Formula used to calculate the conjugate gradient, options are "FR", "PR" and "PRP+".
+    params : Params
+        Parameter tensors.
+    lr_init : float, default=1.0
+        Initial learning rate.
+    lr_method : str or None, default=None
+        Learning rate initialization method.
+    c1 : float, default=1e-4
+        Sufficient decrease parameter (Armijo).
+    c2 : float, default=0.9
+        Curvature condition parameter (Wolfe).
+    tau : float, default=0.1
+        Step reduction factor for backtracking.
+    max_iter : int, default=20
+        Maximum iterations for line search.
+    tol : float, default=1e-8
+        Tolerance (e.g., minimum step).
+    line_search_method : str, default="backtrack"
+        Line-search method (see create_line_search_solver).
+    line_search_cond : str, default="armijo"
+        Line-search stopping condition.
+    cg_method : str, default="PRP+"
+        Conjugate gradient formula.
     """
 
     def __init__(
         self,
-        params: nn.Module,
+        params: Params,
         lr_init: float = 1.0,
         lr_method: str = None,
         c1: float = 1e-4,
