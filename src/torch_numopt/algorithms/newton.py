@@ -158,6 +158,7 @@ class NewtonTR(TrustRegionOptimizer):
         mu: float = 1,
         solver: str = "solve",
         block_hessian: bool = False,
+        accept_tol: float = 1.0,
     ):
         if block_hessian:
             curvature_estimator = ExactBlockHessianCalculator(damping=damping, mu=mu)
@@ -169,6 +170,7 @@ class NewtonTR(TrustRegionOptimizer):
             trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=curvature_estimator, solver=solver),
             curvature_estimator=curvature_estimator,
             radius_init=radius_init,
+            accept_tol=accept_tol,
         )
 
 
@@ -284,13 +286,7 @@ class NewtonCGTR(TrustRegionOptimizer):
         Damping coefficient.
     """
 
-    def __init__(
-        self,
-        params: Params,
-        radius_init: float = 1.0,
-        damping: str = None,
-        mu: float = 1,
-    ):
+    def __init__(self, params: Params, radius_init: float = 1.0, damping: str = None, mu: float = 1, accept_tol: float = 1.0):
         curvature_estimator = ExactHessianCalculator(damping=damping, mu=mu)
 
         super().__init__(
@@ -298,4 +294,5 @@ class NewtonCGTR(TrustRegionOptimizer):
             trust_region=SteihaugTointTRSolver(curvature_estimator),
             curvature_estimator=curvature_estimator,
             radius_init=radius_init,
+            accept_tol=accept_tol,
         )

@@ -10,8 +10,11 @@ common machine learning tasks with data batching.
 from __future__ import annotations
 from abc import ABC, abstractmethod
 import math
+from typing import Callable
 import torch
+from torch import nn
 from torch.func import functional_call
+from torch.optim import Optimizer
 from .utils import param_dot, Params
 
 
@@ -35,7 +38,7 @@ class ObjectiveFunction(ABC):
         over sub-sets of the data). Defaults to ``False``.
     """
 
-    def __init__(self, params: Params, optimizer, batched=False):
+    def __init__(self, params: Params, optimizer: Optimizer, batched: bool = False):
         self.params = tuple(params)
         self.optimizer = optimizer
         self.batched = batched
@@ -139,7 +142,7 @@ class SupervisedLearningObjective(ObjectiveFunction):
         at once.
     """
 
-    def __init__(self, model, loss_fn, optimizer, weight_decay=0, batch_size=None):
+    def __init__(self, model: nn.Module, loss_fn: Callable, optimizer: Optimizer, weight_decay: float = 0, batch_size: int = None):
         super().__init__(params=model.parameters(), optimizer=optimizer, batched=batch_size is not None)
         self.model = model
         self.loss_fn = loss_fn
@@ -154,7 +157,7 @@ class SupervisedLearningObjective(ObjectiveFunction):
         if hasattr(loss_fn, "reduction"):
             self.reduction = loss_fn.reduction
 
-    def set_data(self, x, y):
+    def set_data(self, x: torch.Tensor, y: torch.Tensor):
         """
         Set the training data.
 
@@ -174,7 +177,7 @@ class SupervisedLearningObjective(ObjectiveFunction):
             self.n_batches = math.ceil(len(x) / self.batch_size)
         self.data_size = x.shape[0]
 
-    def batch_data_size(self, batch_idx):
+    def batch_data_size(self, batch_idx: int):
         """
         Get the size of a specific batch (the last batch may be smaller).
 

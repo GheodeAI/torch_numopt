@@ -367,6 +367,7 @@ def test_hutchinson_diagonal_shape(objective, params):
     for d, p in zip(diag_blocks, params):
         assert d.shape == p.shape
 
+
 def test_hutchinson_diagonal_against_true_diagonal(objective, params, dataset):
     X, y = dataset
     H_ref = analytical_hessian_linear(X, y)

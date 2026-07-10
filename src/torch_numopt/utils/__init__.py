@@ -27,15 +27,9 @@ from .param_operations import (
     Params,
 )
 
-from .stability import (
-    fix_cond,
-    fix_stability,
-    pinv_svd_trunc
-)
+from .stability import fix_cond, fix_stability, pinv_svd_trunc
 
-from .utils import (
-    torch_to_float
-)
+from .utils import torch_to_float
 
 __all__ = [
     "param_dot",

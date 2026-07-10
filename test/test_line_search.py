@@ -250,6 +250,7 @@ def test_bisection_basic(scalar_obj, scalar_params, scalar_grad, scalar_step_dir
     new_dir_deriv = (new_grad * scalar_step_dir[0]).sum().item()
     assert abs(new_dir_deriv) < 1e-6
 
+
 # ----------------------------------------------------------------------
 # Tests for create_line_search_solver factory
 # ----------------------------------------------------------------------

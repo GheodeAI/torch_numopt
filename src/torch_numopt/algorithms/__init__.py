@@ -45,5 +45,5 @@ __all__ = [
     "LBFGSLS",
     "AdaHessian",
     "AdaHessianLS",
-    "DiagonalNewtonLS"
+    "DiagonalNewtonLS",
 ]

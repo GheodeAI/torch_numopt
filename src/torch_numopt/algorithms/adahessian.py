@@ -132,7 +132,7 @@ class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
 
     Same as AdaHessian, but instead of a fixed learning rate it performs a
     line search to determine the step length.
-    
+
     Works well in practice, but theoretically it's not well supported.
 
     Parameters
@@ -182,6 +182,7 @@ class AdaHessianLS(AdaHessianMixin, LineSearchOptimizer):
             k=k,
             eps=eps,
         )
+
 
 class DiagonalNewtonLS(LineSearchOptimizer):
     """

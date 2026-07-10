@@ -69,7 +69,7 @@ class NumericalOptimizer(Optimizer, ABC):
         lr_init: float = 1,
         lr_method: str | None = None,
         lr_tol: float = 1e-18,
-        solver="solve",
+        solver: str = "solve",
         fix_ascent: bool = True,
     ):
         assert lr_init > 0, "Learning rate must be a positive number."
@@ -173,7 +173,7 @@ class NumericalOptimizer(Optimizer, ABC):
 
         return new_lr
 
-    def get_step_direction(self, objective, grad_params):
+    def get_step_direction(self, objective: ObjectiveFunction, grad_params: Params):
         """
         Compute the un-scaled step direction by solving the system
         ``H * p = -grad`` (or an approximation).
@@ -302,7 +302,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
         line_search: LineSearchSolver,
         lr_init: float = 1,
         lr_method: str | None = None,
-        solver="solve",
+        solver: str = "solve",
     ):
         super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver)
         self.line_search = line_search
@@ -361,12 +361,29 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         system will be solved internally by the trust region solver.
     """
 
-    def __init__(self, params: Params, trust_region: TrustRegionSolver, radius_init: float = 1.0, accept_tol: float = 0.1, curvature_estimator=None):
+    def __init__(
+        self,
+        params: Params,
+        trust_region: TrustRegionSolver,
+        radius_init: float = 1.0,
+        accept_tol: float = 0.1,
+        curvature_estimator: CurvatureEstimator = None,
+    ):
         super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=radius_init)
         self.trust_region = trust_region
         self.accept_tol = accept_tol
 
-    def new_model_radius(self, objective, radius, radius_init, loss, params, grad_params, new_loss, step_dir):
+    def new_model_radius(
+        self,
+        objective: ObjectiveFunction,
+        radius: float,
+        radius_init: float,
+        loss: float,
+        params: Params,
+        grad_params: Params,
+        new_loss: float,
+        step_dir: Params,
+    ):
         """
         Update the trust-region radius based on the ratio rho.
 

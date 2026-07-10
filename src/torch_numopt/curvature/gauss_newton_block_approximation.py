@@ -138,7 +138,7 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
 
             jac_dot_step = [None] * len(params)
             zero_params = tuple(torch.zeros(p.shape, device=p.device, dtype=p.dtype) for p in params)
-            for i, (p, s_d) in enumerate(zip(params, step_dir)):
+            for i, s_d in enumerate(step_dir):
                 tangents = zero_params[:i] + (s_d,) + zero_params[i + 1 :]
                 _, j_dot_step_p = torch.func.jvp(objective.residual, params, tuple(tangents))
                 jac_dot_step[i] = j_dot_step_p
@@ -151,8 +151,13 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
             jac_dot_step = None
             for i in range(objective.n_batches):
                 # Calculate approximate hessian of the batch
-                get_residuals = partial(objective.residual, batch_idx=i)
-                _, jac_dot_step_batch = torch.autograd.functional.jvp(get_residuals, params, v=step_dir)
+                jac_dot_step_batch = [None] * len(params)
+                zero_params = tuple(torch.zeros(p.shape, device=p.device, dtype=p.dtype) for p in params)
+                for i, s_d in enumerate(step_dir):
+                    tangents = zero_params[:i] + (s_d,) + zero_params[i + 1 :]
+                    _, j_dot_step_p = torch.func.jvp(objective.residual, params, tuple(tangents))
+                    jac_dot_step_batch[i] = j_dot_step_p
+                jac_dot_step_batch = tuple(jac_dot_step_batch)
 
                 if jac_dot_step is None:
                     jac_dot_step = jac_dot_step_batch
@@ -172,7 +177,7 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
 
             hess_dot_step = [None] * len(params)
             zero_params = tuple(torch.zeros(p.shape, device=p.device, dtype=p.dtype) for p in params)
-            for i, (p, s_d) in enumerate(zip(params, step_dir)):
+            for i, s_d in enumerate(step_dir):
                 tangents = zero_params[:i] + (s_d,) + zero_params[i + 1 :]
                 _, Jv = torch.func.jvp(objective.residual, params, tuple(tangents))
                 _, jac_fn = torch.func.vjp(objective.residual, *params)
@@ -189,7 +194,7 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
                 # Calculate approximate hessian of the batch
                 hess_approx_batch = [None] * len(params)
                 zero_params = tuple(torch.zeros(p.shape, device=p.device, dtype=p.dtype) for p in params)
-                for i, (p, s_d) in enumerate(zip(params, step_dir)):
+                for i, s_d in enumerate(step_dir):
                     tangents = zero_params[:i] + (s_d,) + zero_params[i + 1 :]
                     _, Jv = torch.func.jvp(objective.residual, params, tuple(tangents))
                     _, jac_fn = torch.func.vjp(objective.residual, params)

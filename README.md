@@ -58,7 +58,7 @@ model = nn.Sequential(nn.Linear(10, 20), nn.ReLU(), nn.Linear(20, 1))
 loss_fn = nn.MSELoss()
 
 X = torch.randn(100, 10)
-y = torch.randn(100, 1)
+y = torch.sum(X, dim=1, keepdim=True)
 
 optimizer = GaussNewtonLS(model.parameters(), lr_init=1.0, line_search_method="backtrack")
 objective = SupervisedLearningObjective(model, loss_fn, optimizer)

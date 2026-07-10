@@ -42,7 +42,7 @@ class GaussNewton(NumericalOptimizer):
 
     def __init__(
         self,
-        params: Params, 
+        params: Params,
         lr_init: float = 1e-3,
         lr_method: str | None = None,
         solver: str = "solve",
@@ -191,6 +191,7 @@ class GaussNewtonTR(TrustRegionOptimizer):
         damping: str | None = None,
         mu: float = 1,
         block_hessian: bool = False,
+        accept_tol: float = 1.0,
     ):
         if block_hessian:
             curvature_estimator = GaussNewtonBlockApproximation(damping=damping, mu=mu)
@@ -202,4 +203,5 @@ class GaussNewtonTR(TrustRegionOptimizer):
             trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=curvature_estimator, solver=solver),
             curvature_estimator=curvature_estimator,
             radius_init=radius_init,
+            accept_tol=accept_tol,
         )

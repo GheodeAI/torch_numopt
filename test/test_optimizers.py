@@ -121,7 +121,7 @@ class FixedStepTrustRegion(TrustRegionSolver):
             step = param_scalar_prod(-radius / g_norm, g)
         else:
             step = self.step_dir
-        return step   # only the step direction, not a tuple
+        return step  # only the step direction, not a tuple
 
 
 # ----------------------------------------------------------------------
@@ -182,7 +182,7 @@ def test_apply_gradients_and_update(scalar_obj, scalar_params, scalar_grad, exac
     loss_new = scalar_obj.loss(*scalar_params)
     assert loss_new < loss_old
     # After apply_gradients, prev_* are updated with the new step's values
-    assert opt.prev_lr == 0.5   # kept from before
+    assert opt.prev_lr == 0.5  # kept from before
     assert opt.prev_loss == loss_new
     assert opt.prev_params is not None
     # prev_params should be detached clones of new parameters
@@ -206,7 +206,7 @@ def test_step_full_iteration(scalar_obj, scalar_params, scalar_grad, exact_curva
     opt.step(scalar_obj)
     loss1 = scalar_obj.loss(*scalar_params)
     assert loss1 < loss0
-    assert opt.prev_lr == 0.5   # kept
+    assert opt.prev_lr == 0.5  # kept
     # prev_loss should be updated to new loss after step
     assert opt.prev_loss == loss1
 
@@ -229,7 +229,7 @@ def test_line_search_optimizer_uses_line_search(scalar_obj, scalar_params, scala
     opt.apply_gradients(scalar_obj, scalar_params, scalar_grad)
     loss_new = scalar_obj.loss(*scalar_params)
     assert loss_new < loss_old
-    assert opt.prev_lr == fixed_lr   # the line search returned this lr
+    assert opt.prev_lr == fixed_lr  # the line search returned this lr
 
 
 def test_line_search_optimizer_step_calls_line_search(scalar_obj, scalar_params, exact_curvature):
@@ -340,4 +340,4 @@ def test_trust_region_rejects_bad_step(scalar_obj, scalar_params, scalar_grad, n
     opt.apply_gradients(scalar_obj, scalar_params, scalar_grad)
     # Step rejected, parameters stay at 0
     assert scalar_params[0].item() == 0.0
-    assert opt.prev_loss == loss0   # loss unchanged
+    assert opt.prev_loss == loss0  # loss unchanged

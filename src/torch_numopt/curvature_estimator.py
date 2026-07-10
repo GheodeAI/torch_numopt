@@ -1,4 +1,4 @@
-""" """
+"""Base class for curvature estimation class."""
 
 from __future__ import annotations
 from typing import Iterable

@@ -14,7 +14,7 @@ import torch
 from ..utils import Params, param_detach, param_dot, param_neg, param_norm, param_scaled_add, torch_to_float
 from ..objective import ObjectiveFunction
 from ..numerical_optimizer import TrustRegionOptimizer
-from ..curvature import GaussNewtonBlockApproximation
+from ..curvature import GaussNewtonBlockApproximation, GaussNewtonApproximation
 
 from ..trust_region import CauchyPointTRSolver
 
@@ -51,18 +51,24 @@ class LevenbergMarquardt(TrustRegionOptimizer):
     def __init__(
         self,
         params: Params,
-        mu: float = 1e-2,
+        mu: float = 1,
         mu_dec: float = 0.1,
         mu_max: float = 1e10,
-        accept_tol=0,
+        accept_tol: float = 0,
         damping: str = "fletcher",
         solver: str = "cholesky",
+        block_hessian: bool = True,
     ):
         assert damping is not None, "Levenberg-Marquardt must use a damping strategy."
+        if block_hessian:
+            curvature_estimator = GaussNewtonBlockApproximation(damping=damping, mu=mu)
+        else:
+            curvature_estimator = GaussNewtonApproximation(damping=damping, mu=mu)
+
         super().__init__(
             params,
             trust_region=CauchyPointTRSolver(curvature_estimator=GaussNewtonBlockApproximation(damping=None)),
-            curvature_estimator=GaussNewtonBlockApproximation(damping=damping, mu=mu),
+            curvature_estimator=curvature_estimator,
             accept_tol=accept_tol,
         )
         self.solver = solver

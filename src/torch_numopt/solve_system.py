@@ -21,7 +21,7 @@ from .utils import (
     param_flatten,
     param_reshape_like,
     param_zero_like,
-    Params
+    Params,
 )
 
 logger = logging.getLogger(__name__)
@@ -178,7 +178,15 @@ def _solve_system(curvature_estimator: CurvatureEstimator, objective: ObjectiveF
     return tuple(solution_params)
 
 
-def conjugate_gradient(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs: Params, max_iter: int=100, atol:float=1e-8, tol:float=1e-4, min_iter:int=2) -> Params:
+def conjugate_gradient(
+    curvature_estimator: CurvatureEstimator,
+    objective: ObjectiveFunction,
+    rhs: Params,
+    max_iter: int = 100,
+    atol: float = 1e-8,
+    tol: float = 1e-4,
+    min_iter: int = 2,
+) -> Params:
     """
     Solve H p = rhs using the conjugate gradient (CG) method.
 
@@ -237,12 +245,20 @@ def conjugate_gradient(curvature_estimator: CurvatureEstimator, objective: Objec
     return new_params
 
 
-def truncated_cg(curvature_estimator: CurvatureEstimator, objective: ObjectiveFunction, rhs: Params, max_iter: int=100, atol:float=1e-8, tol:float=1e-4, min_iter:int=2) -> Params:
+def truncated_cg(
+    curvature_estimator: CurvatureEstimator,
+    objective: ObjectiveFunction,
+    rhs: Params,
+    max_iter: int = 100,
+    atol: float = 1e-8,
+    tol: float = 1e-4,
+    min_iter: int = 2,
+) -> Params:
     """
     Truncated conjugate gradient method.
 
     Similar to CG, but it stops early if a direction of negative curvature is
-    encountered (pᵀHp ≤ 0). 
+    encountered (pᵀHp ≤ 0).
 
     Parameters
     ----------

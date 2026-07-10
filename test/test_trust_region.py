@@ -229,7 +229,7 @@ def test_dogleg_non_positive_definite(diag_obj, diag_params, diag_grad):
         def scaling_matrix(self, objective, params):
             H = super().scaling_matrix(objective, params)
             # Make it non-PD by subtracting 3 from first diagonal element
-            H[0, 0] -= 3.0   # now first eigenvalue = -1 (since original was 2)
+            H[0, 0] -= 3.0  # now first eigenvalue = -1 (since original was 2)
             return H
 
     curv = NonPDCurvature(damping=None)
