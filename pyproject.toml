@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torch_numopt"
-version = "1.0.0"
+version = "1.0.1"
 description = "Classic numerical optimization methods for Pytorch neural networks"
 readme = "README.md"
 authors = [
@@ -20,6 +20,13 @@ dependencies = [
 Homepage = "https://github.com/GheodeAI/torch_numopt"
 
 [project.optional-dependencies]
+docs = [
+    "sphinx",
+    "pydata_sphinx_theme",
+    "sphinx_autodoc_typehints",
+    "numpydoc"
+]
+
 dev = [
     "scikit-learn",
     "matplotlib",
@@ -27,10 +34,9 @@ dev = [
     "torchvision",
     "jupyter",
     "sphinx>=7.1.1",
-    "pytest_sphinx_theme",
-    "numpydoc",
     "black[jupyter]",
-    "pytest"
+    "pytest",
+    "torch_numopt[docs]"
 ]
 
 [tool.black]
