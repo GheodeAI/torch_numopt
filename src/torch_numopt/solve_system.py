@@ -262,7 +262,20 @@ def truncated_cg(
 
     Parameters
     ----------
-    same as conjugate_gradient
+    curvature_estimator : CurvatureEstimator
+        Provides the Hessian-vector product (Hvp).
+    objective : ObjectiveFunction
+        Objective function (needed to pass parameters to Hvp).
+    rhs : Params
+        Right-hand side vector (typically -gradient).
+    max_iter : int, default=100
+        Maximum number of CG iterations.
+    atol : float, default=1e-8
+        Absolute tolerance for the residual norm.
+    tol : float, default=1e-4
+        Relative tolerance (residual norm <= tol * norm(rhs)).
+    min_iter : int, default=2
+        Minimum iterations before checking stopping criteria.
 
     Returns
     -------
@@ -311,7 +324,20 @@ def conjugate_residual(curvature_estimator, objective, rhs, max_iter=100, atol=1
 
     Parameters
     ----------
-    same as conjugate_gradient
+    curvature_estimator : CurvatureEstimator
+        Provides the Hessian-vector product (Hvp).
+    objective : ObjectiveFunction
+        Objective function (needed to pass parameters to Hvp).
+    rhs : Params
+        Right-hand side vector (typically -gradient).
+    max_iter : int, default=100
+        Maximum number of CG iterations.
+    atol : float, default=1e-8
+        Absolute tolerance for the residual norm.
+    tol : float, default=1e-4
+        Relative tolerance (residual norm <= tol * norm(rhs)).
+    min_iter : int, default=2
+        Minimum iterations before checking stopping criteria.
 
     Returns
     -------

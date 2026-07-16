@@ -10,10 +10,6 @@ The library provides concrete optimizers that combine a curvature estimator with
 All optimizers inherit from :class:`torch.optim.Optimizer` and are used with a closure-based objective
 (see :class:`~torch_numopt.objective.ObjectiveFunction`).
 
-For advanced customization of the underlying line-search or trust-region mechanics
-(e.g., using a different solver or condition), refer to the dedicated page
-:doc:`/advanced/line_search_trust_region`.
-
 
 Fixed-step optimizers
 ---------------------

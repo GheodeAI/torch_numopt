@@ -67,8 +67,8 @@ class NumericalOptimizer(Optimizer, ABC):
         self,
         params: Params,
         curvature_estimator: CurvatureEstimator,
-        lr_init: float = 1,
         lr_method: str | StepSizeInitializer = None,
+        lr_init: float = 1,
         solver: str = "solve",
         fix_ascent: bool = True,
         min_lr: float = 0,
@@ -83,8 +83,8 @@ class NumericalOptimizer(Optimizer, ABC):
             lr_method = create_step_size_init(lr_method, lr_init, curvature_estimator, min_lr, max_lr)
         
         self.params = params
-        self.lr_init = lr_init
         self.lr_method = lr_method
+        self.lr_init = lr_method.lr_init
         self.curvature_estimator = curvature_estimator
         self.solver = solver
         self.fix_ascent = fix_ascent
@@ -227,11 +227,13 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
         params: Iterable[torch.Tensor],
         curvature_estimator: CurvatureEstimator,
         line_search: LineSearchSolver,
-        lr_init: float = 1,
         lr_method: str | StepSizeInitializer = None,
+        lr_init: float = 1,
         solver: str = "solve",
+        min_lr: float = 0,
+        max_lr: float = 100
     ):
-        super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver)
+        super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver, min_lr=min_lr, max_lr=max_lr)
         self.line_search = line_search
 
     def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):

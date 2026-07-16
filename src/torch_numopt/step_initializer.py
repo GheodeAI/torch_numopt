@@ -8,22 +8,22 @@ from .utils import Params
 
 step_init_methods = {"scaled", "BB1", "BB2", "quadratic", "lipschitz", "keep", None}
 
-def create_step_size_init(method: str, init_lr: float, curvature_estimator: CurvatureEstimator, min_lr=0, max_lr=100, **kwargs):
+def create_step_size_init(method: str, lr_init: float, curvature_estimator: CurvatureEstimator, min_lr=1e-18, max_lr=100, **kwargs):
     match method:
         case "constant":
-            step_size_init = ConstantStepSize(init_lr, curvature_estimator, min_lr, max_lr)
+            step_size_init = ConstantStepSize(lr_init, curvature_estimator, min_lr, max_lr)
         case "keep":
-            step_size_init = KeepStepSize(init_lr, curvature_estimator, min_lr, max_lr)
+            step_size_init = KeepStepSize(lr_init, curvature_estimator, min_lr, max_lr)
         case "scaled":
-            step_size_init = ScaledStepSize(init_lr, curvature_estimator, min_lr, max_lr)
+            step_size_init = ScaledStepSize(lr_init, curvature_estimator, min_lr, max_lr)
         case "interpolate":
-            step_size_init = InterpolateStepSize(init_lr, curvature_estimator, min_lr, max_lr)
+            step_size_init = InterpolateStepSize(lr_init, curvature_estimator, min_lr, max_lr)
         case "lipschitz":
-            step_size_init = LipschitzStepSize(init_lr, curvature_estimator, min_lr, max_lr)
+            step_size_init = LipschitzStepSize(lr_init, curvature_estimator, min_lr, max_lr)
         case "BB1":
-            step_size_init = BarzilaiBorweinStepSize(init_lr, curvature_estimator, min_lr, max_lr, long_step=False)
+            step_size_init = BarzilaiBorweinStepSize(lr_init, curvature_estimator, min_lr, max_lr, long_step=False)
         case "BB2":
-            step_size_init = BarzilaiBorweinStepSize(init_lr, curvature_estimator, min_lr, max_lr, long_step=True)
+            step_size_init = BarzilaiBorweinStepSize(lr_init, curvature_estimator, min_lr, max_lr, long_step=True)
         case _:
             step_init_methods_str = ", ".join([f"'{i}'" if i is not None else "None" for i in step_init_methods])
             last_comma_idx = step_init_methods_str.rfind(",")
@@ -34,11 +34,11 @@ def create_step_size_init(method: str, init_lr: float, curvature_estimator: Curv
 
 
 class StepSizeInitializer(ABC):
-    def __init__(self, init_lr: float, curvature_estimator: CurvatureEstimator, min_lr=0, max_lr=100):
-        assert init_lr > 0, "Learning rate must be a positive number."
+    def __init__(self, lr_init: float, curvature_estimator: CurvatureEstimator, min_lr=1e-18, max_lr=100):
+        assert lr_init > 0, "Learning rate must be a positive number."
 
         self.curvature_estimator = curvature_estimator
-        self.init_lr = init_lr
+        self.lr_init = lr_init
         self.min_lr = min_lr
         self.max_lr = max_lr
         self.prev_init_lr = None
@@ -57,32 +57,34 @@ class StepSizeInitializer(ABC):
         prev_lr: float,
         delta_loss: float,
     ):
-        """_summary_
+        """
+        Generates the initial step size to be used adjusting it appropriately.
 
         Parameters
         ----------
         objective : ObjectiveFunction
-            _description_
+            Objective function.
         params : Params
-            _description_
+            Current parameters.
         grad_params : Params
-            _description_
+            Gradient of the parameters.
         prev_grad : Params
-            _description_
+            Gradient on the previous iteration.
         step_dir : Params
-            _description_
+            Step direction.
         prev_step_dir : Params
-            _description_
+            Step direction on the previous iteration
         prev_lr : float
-            _description_
+            Previous step size
 
         Returns
         -------
-        _type_
-            _description_
+        float
+            Next step size.
         """
+
         if prev_lr is None:
-            return self.init_lr
+            return self.lr_init
 
         new_lr = self.get_initial_step(objective, params, grad_params, prev_grad, step_dir, prev_step_dir, prev_lr, delta_loss)
         if isinstance(new_lr, torch.Tensor):
@@ -101,29 +103,30 @@ class StepSizeInitializer(ABC):
         prev_lr: float,
         delta_loss: float,
     ):
-        """_summary_
+        """
+        Generates the initial step size to be used.
 
         Parameters
         ----------
         objective : ObjectiveFunction
-            _description_
+            Objective function.
         params : Params
-            _description_
+            Current parameters.
         grad_params : Params
-            _description_
+            Gradient of the parameters.
         prev_grad : Params
-            _description_
+            Gradient on the previous iteration.
         step_dir : Params
-            _description_
+            Step direction.
         prev_step_dir : Params
-            _description_
+            Step direction on the previous iteration
         prev_lr : float
-            _description_
+            Previous step size
 
         Returns
         -------
-        _type_
-            _description_
+        float
+            Next step size.
         """
 
 class ConstantStepSize(StepSizeInitializer):
@@ -138,7 +141,7 @@ class ConstantStepSize(StepSizeInitializer):
         prev_lr: float,
         delta_loss: float,
     ):
-        return self.init_lr
+        return self.lr_init
 
 class KeepStepSize(StepSizeInitializer):
     def get_initial_step(
@@ -202,7 +205,7 @@ class InterpolateStepSize(StepSizeInitializer):
     ):
         eps = torch.finfo(params[0].dtype).eps
         if delta_loss is None:
-            new_lr = self.init_lr
+            new_lr = self.lr_init
         else:
             new_lr = 2 * delta_loss / (param_dot(prev_grad, prev_step_dir) + eps)
             new_lr = min(1.01 * new_lr, 1)

@@ -75,49 +75,73 @@ and must implement the Hessian-vector product and quadratic form.
 Step-size initialization methods
 --------------------------------
 
-For fixed-step and line-search optimizers, the initial learning rate is determined by the
-``lr_init`` parameter, but it can be adjusted using a heuristic via the ``lr_method`` argument.
-These heuristics use information from the previous iteration (gradients, step directions, and
-loss changes) to propose a better starting point for the step size.
+For fixed-step and line-search optimizers, the initial learning rate each iteration is either a specified
+value or an heuristic, this is handled by the :class:`~torch_numopt.step_initializer.StepSizeInitializer` 
+interface which is indicated in the optimizer as the attribute ``lr_method``. These heuristics use information
+from the previous iteration (gradients, step directions, and loss changes) to propose a better starting point
+for the step size.
 
 The following methods are available:
 
 .. list-table::
    :header-rows: 1
 
-   * - ``lr_method``
+   * - Class
+     - Factory identifier (``method``)
      - Description
 
-   * - ``None``
+   * - :class:`~torch_numopt.step_initializer.ConstantStepSize`
+     - ``constant``
      - Use ``lr_init`` directly (no adjustment).
 
-   * - ``"keep"``
+   * - :class:`~torch_numopt.step_initializer.KeepStepSize`
+     - ``"keep"``
      - Reuse the learning rate from the previous iteration.
 
-   * - ``"scaled"``
+   * - :class:`~torch_numopt.step_initializer.ScaledStepSize`
+     - ``"scaled"``
      - Scale the initial rate based on the dot product of previous gradient and step direction
        relative to the current one.
 
-   * - ``"quadratic"``
+   * - :class:`~torch_numopt.step_initializer.QuadraticStepSize`
+     - ``"quadratic"``
      - Use the quadratic form of the curvature to estimate a step that minimizes the model:
        :math:`\alpha = - (g^T p) / (p^T H p)`.
 
-   * - ``"interpolate"``
+   * - :class:`~torch_numopt.step_initializer.InterpolateStepSize`
+     - ``"interpolate"``
      - Estimate the rate from the change in loss between iterations (useful after a line search).
 
-   * - ``"lipschitz"``
+   * - :class:`~torch_numopt.step_initializer.LipschitzStepSize`
+     - ``"lipschitz"``
      - Estimate the Lipschitz constant from the change in gradients and parameters:
        :math:`\alpha = \|s\| / \|y\|`.
 
-   * - ``"BB1"``
-     - Barzilai-Borwein formula 1: :math:`\alpha = (s^T s) / (s^T y)`.
+   * - :class:`~torch_numopt.step_initializer.BarzilaiBorweinStepSize`
+     - ``"BB1"``
+     - Barzilai-Borwein formula 1: :math:`\alpha = (s^T s) / (s^T y)`. When ``use_long_step=True``.
 
-   * - ``"BB2"``
-     - Barzilai-Borwein formula 2: :math:`\alpha = (s^T y) / (y^T y)`.
+   * - :class:`~torch_numopt.step_initializer.BarzilaiBorweinStepSize`
+     - ``"BB2"``
+     - Barzilai-Borwein formula 2: :math:`\alpha = (s^T y) / (y^T y)`. When ``use_long_step=False``.
 
 where :math:`s` is the previous step (parameter change) and :math:`y` is the previous gradient
 change. These heuristics are particularly useful for gradient descent and Newton-type methods
 with fixed step sizes, as they can accelerate convergence without manual tuning.
+
+The factory function :func:`~torch_numopt.step_initializer.create_` is used internally in 
+:class:`~torch_numopt.numerical_optimizer.NumericalOptimizer` but it can also be used as:
+
+.. code-block:: python
+
+   lr_method = create_step_size_init(
+       "BB1",
+       lr_init=1,
+       curvature_estimator=my_curvature,
+       min_lr=1e-12,
+       max_lr=100
+   )
+
 
 Available line-search solvers
 ------------------------------
