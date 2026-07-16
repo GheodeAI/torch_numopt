@@ -16,6 +16,7 @@ from torch.optim import Optimizer
 from torch_numopt.utils.param_operations import param_add
 
 from .utils import param_diff, param_scalar_prod, param_dot, param_neg, param_norm, param_scaled_add, param_copy, param_detach, Params, torch_to_float
+from .step_initializer import StepSizeInitializer, ConstantStepSize, create_step_size_init
 from .line_search import LineSearchSolver
 from .trust_region import TrustRegionSolver
 from .curvature_estimator import CurvatureEstimator
@@ -67,27 +68,30 @@ class NumericalOptimizer(Optimizer, ABC):
         params: Params,
         curvature_estimator: CurvatureEstimator,
         lr_init: float = 1,
-        lr_method: str | None = None,
-        lr_tol: float = 1e-18,
+        lr_method: str | StepSizeInitializer = None,
         solver: str = "solve",
         fix_ascent: bool = True,
+        min_lr: float = 0,
+        max_lr: float = 100
     ):
-        assert lr_init > 0, "Learning rate must be a positive number."
-
         params = tuple(params)
         super().__init__(params=params, defaults={})
-
+        
+        if lr_method is None:
+            lr_method = ConstantStepSize(lr_init, curvature_estimator, min_lr, max_lr)
+        elif isinstance(lr_method, str):
+            lr_method = create_step_size_init(lr_method, lr_init, curvature_estimator, min_lr, max_lr)
+        
         self.params = params
         self.lr_init = lr_init
         self.lr_method = lr_method
-        self.lr_tol = lr_tol
         self.curvature_estimator = curvature_estimator
         self.solver = solver
         self.fix_ascent = fix_ascent
 
         # Storage of previous solutions
         self.prev_lr = None
-        self.prev_lr_init = lr_init
+        self.prev_lr_init = None
         self.prev_grad = None
         self.prev_step_dir = None
         self.prev_params = None
@@ -95,83 +99,6 @@ class NumericalOptimizer(Optimizer, ABC):
         self.delta_loss = None
 
         self.reset = False
-
-    def initialize_lr(self, lr: float, grad_params: Params, step_dir: Params, objective: ObjectiveFunction, params: Params):
-        """
-        Compute an initial learning rate for the current step.
-
-        Uses the stored information from previous iterations and the chosen
-        ``lr_method`` to propose a learning rate.
-
-        Parameters
-        ----------
-        lr : float
-            Base learning rate (fallback value).
-        grad_params : Params
-            Current gradient.
-        step_dir : Params
-            Proposed step direction (before scaling).
-        objective : ObjectiveFunction
-            Objective function (used for curvature evaluations).
-        params : Params
-            Current parameters.
-
-        Returns
-        -------
-        float
-            Proposed initial learning rate.
-        """
-
-        if self.prev_lr is None:
-            return lr
-
-        prev_grad = self.prev_grad
-        prev_step_dir = self.prev_step_dir
-
-        s = param_scalar_prod(self.prev_lr, prev_step_dir)
-        y = param_diff(grad_params, prev_grad)
-
-        new_lr = None
-        eps = torch.finfo(params[0].dtype).eps
-        match self.lr_method:
-            case None:
-                new_lr = lr
-            case "keep":
-                new_lr = self.prev_lr
-            case "scaled":
-                new_lr = self.prev_lr_init * param_dot(prev_grad, prev_step_dir) / (param_dot(grad_params, step_dir) + eps)
-            case "quadratic":
-                new_lr = -param_dot(grad_params, step_dir) / (self.curvature_estimator.quadratic_form(objective, params, step_dir) + eps)
-            case "interpolate":
-                if self.delta_loss is None:
-                    new_lr = lr
-                else:
-                    new_lr = 2 * self.delta_loss / param_dot(prev_grad, prev_step_dir)
-                    new_lr = min(1.01 * new_lr, 1)
-            case "lipschitz":
-                new_lr = param_norm(s) / (param_norm(y) + eps)
-            case "BB1":
-                # Barzilai-Borwein first formula
-                new_lr = param_dot(s, s) / (param_dot(s, y) + eps)
-            case "BB2":
-                # Barzilai-Borwein second formula
-                new_lr = param_dot(s, y) / (param_dot(y, y) + eps)
-            case _:
-                lr_init_methods_str = ", ".join([f"'{i}'" if i is not None else "None" for i in lr_init_methods])
-                last_comma_idx = lr_init_methods_str.rfind(",")
-                lr_init_methods_str = lr_init_methods_str[:last_comma_idx] + " or" + lr_init_methods_str[last_comma_idx + 1 :]
-                raise ValueError(f"Learning rate initialization method {self.lr_method} does not exist. Try {lr_init_methods_str}.")
-
-        if new_lr <= self.lr_tol:
-            logger.error("Estimated lr (%g) will yield an ascent direction. Falling back to guess %g", new_lr, lr)
-            new_lr = lr
-
-        if isinstance(new_lr, torch.Tensor):
-            new_lr = new_lr.item()
-
-        logger.info("Initial lr generated = %g with method %s and initial guess %g.", new_lr, self.lr_method, lr)
-
-        return new_lr
 
     def get_step_direction(self, objective: ObjectiveFunction, grad_params: Params):
         """
@@ -215,7 +142,7 @@ class NumericalOptimizer(Optimizer, ABC):
         if self.fix_ascent and param_dot(grad_params, step_dir) > 1e-8:
             logger.warning("Ascent direction detected, falling back to steepest descent. ")
             step_dir = param_neg(grad_params)
-        lr = self.initialize_lr(self.lr_init, grad_params, step_dir, objective, params)
+        lr = self.lr_method(objective, params, grad_params, self.prev_grad, step_dir, self.prev_step_dir, self.prev_lr, self.delta_loss)
 
         new_params = param_scaled_add(params, step_dir, scale=lr)
 
@@ -301,7 +228,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
         curvature_estimator: CurvatureEstimator,
         line_search: LineSearchSolver,
         lr_init: float = 1,
-        lr_method: str | None = None,
+        lr_method: str | StepSizeInitializer = None,
         solver: str = "solve",
     ):
         super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver)
@@ -313,7 +240,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
             logger.warning("Ascent direction detected, falling back to steepest descent. ")
             step_dir = param_neg(grad_params)
 
-        lr_init = self.initialize_lr(self.lr_init, grad_params, step_dir, objective, params)
+        lr_init = self.lr_method(objective, params, grad_params, self.prev_grad, step_dir, self.prev_step_dir, self.prev_lr, self.delta_loss)
 
         new_params, lr = self.line_search.find_step_size(params, step_dir, grad_params, lr_init, objective)
 

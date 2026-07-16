@@ -129,31 +129,6 @@ class FixedStepTrustRegion(TrustRegionSolver):
 # ----------------------------------------------------------------------
 
 
-def test_initialize_lr_methods(scalar_obj, scalar_params, scalar_grad, exact_curvature):
-    opt = NumericalOptimizer(params=scalar_params, curvature_estimator=exact_curvature, lr_init=1.0, lr_method=None, fix_ascent=True)
-    # Set previous values with non‑zero loss change
-    prev_lr = 0.5
-    prev_grad = (torch.tensor([-4.0], dtype=torch.float64),)
-    prev_step_dir = (torch.tensor([2.0], dtype=torch.float64),)
-    prev_loss = -2.0
-    opt.prev_lr = prev_lr
-    opt.prev_grad = prev_grad
-    opt.prev_step_dir = prev_step_dir
-    opt.prev_loss = prev_loss
-
-    step_dir = (torch.tensor([1.0], dtype=torch.float64),)
-
-    methods = [None, "keep", "scaled", "lipschitz", "BB1", "BB2", "quadratic"]
-    for method in methods:
-        opt.lr_method = method
-        lr = opt.initialize_lr(lr=1.0, grad_params=scalar_grad, step_dir=step_dir, objective=scalar_obj, params=scalar_params)
-        assert lr > 0, f"Method {method} returned non‑positive lr"
-
-    with pytest.raises(ValueError):
-        opt.lr_method = "invalid"
-        opt.initialize_lr(1.0, scalar_grad, step_dir, scalar_obj, scalar_params)
-
-
 def test_get_step_direction_returns_step(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     """Just verify that get_step_direction returns a non‑None step."""
     opt = NumericalOptimizer(params=scalar_params, curvature_estimator=exact_curvature, lr_init=1.0, fix_ascent=True)
