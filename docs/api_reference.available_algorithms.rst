@@ -50,6 +50,11 @@ These optimizers compute a direction and apply a scalar step length. The learnin
      - ``lr_init``, ``lr_method``, ``damping``, ``mu``, ``solver``
      - Inexact Newton using an iterative solver (e.g., ``"cg-trunc"``). Never forms the full Hessian.
 
+   * - :py:class:`~torch_numopt.algorithms.hutchinson_newton.DiagonalNewton`
+     - Diagonal Hessian (Hutchinson)
+     - ``lr_init``, ``lr_method``, ``n_samples``, ``skip_iters``
+     - Newton's method using the Hutchinson Diagonal approximation. Not recommended but added for completeness
+
    * - :py:class:`~torch_numopt.algorithms.gauss_newton.GaussNewton`
      - Gauss-Newton (JᵀJ)
      - ``lr_init``, ``lr_method``, ``damping``, ``mu``, ``block_hessian``, ``solver``
@@ -62,7 +67,7 @@ These optimizers compute a direction and apply a scalar step length. The learnin
 
    * - :py:class:`~torch_numopt.algorithms.adahessian.AdaHessian`
      - Diagonal Hessian (Hutchinson)
-     - ``lr_init``, ``lr_method``, ``beta1``, ``beta2``, ``k``, ``eps``, ``n_samples``
+     - ``lr_init``, ``lr_method``, ``beta1``, ``beta2``, ``k``, ``eps``, ``n_samples``, ``skip_iters``
      - Adaptive method similar to Adam, but using the diagonal of the Hessian.
 
 
@@ -116,13 +121,13 @@ These optimizers compute a direction and then perform a line search to find an a
 
    * - :py:class:`~torch_numopt.algorithms.adahessian.AdaHessianLS`
      - Diagonal Hessian (Hutchinson)
-     - ``lr_init``, ``lr_method``, ``beta1``, ``beta2``, ``k``, ``eps``, ``n_samples``
+     - ``lr_init``, ``lr_method``, ``beta1``, ``beta2``, ``k``, ``eps``, ``n_samples``, ``skip_iters``
      - AdaHessian with line search.
 
    * - :py:class:`~torch_numopt.algorithms.adahessian.DiagonalNewtonLS`
      - Diagonal Hessian (Hutchinson)
-     - ``lr_init``, ``lr_method``, ``n_samples``
-     - Diagonal Newton (without momentum) with line search.
+     - ``lr_init``, ``lr_method``, ``n_samples``, ``skip_iters``
+     - Diagonal Newton with line search.
 
 
 Trust-region optimizers

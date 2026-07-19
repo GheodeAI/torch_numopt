@@ -8,6 +8,7 @@ from .utils import Params
 
 step_init_methods = {"scaled", "BB1", "BB2", "quadratic", "lipschitz", "keep", None}
 
+
 def create_step_size_init(method: str, lr_init: float, curvature_estimator: CurvatureEstimator, min_lr=1e-18, max_lr=100, **kwargs):
     match method:
         case "constant":
@@ -29,7 +30,7 @@ def create_step_size_init(method: str, lr_init: float, curvature_estimator: Curv
             last_comma_idx = step_init_methods_str.rfind(",")
             step_init_methods_str = step_init_methods_str[:last_comma_idx] + " or" + step_init_methods_str[last_comma_idx + 1 :]
             raise ValueError(f"Step size initialization method {method} does not exist. Try {step_init_methods_str}.")
-    
+
     return step_size_init
 
 
@@ -41,11 +42,11 @@ class StepSizeInitializer(ABC):
         self.lr_init = lr_init
         self.min_lr = min_lr
         self.max_lr = max_lr
-        self.prev_init_lr = None
+        self.prev_lr_init = lr_init
         self.curvature_estimator = None
         self.prev_grad = None
         self.prev_step_dir = None
-    
+
     def __call__(
         self,
         objective: ObjectiveFunction,
@@ -89,6 +90,9 @@ class StepSizeInitializer(ABC):
         new_lr = self.get_initial_step(objective, params, grad_params, prev_grad, step_dir, prev_step_dir, prev_lr, delta_loss)
         if isinstance(new_lr, torch.Tensor):
             new_lr = new_lr.item()
+
+        self.prev_lr_init = prev_lr
+
         return min(max(new_lr, self.min_lr), self.max_lr)
 
     @abstractmethod
@@ -129,6 +133,7 @@ class StepSizeInitializer(ABC):
             Next step size.
         """
 
+
 class ConstantStepSize(StepSizeInitializer):
     def get_initial_step(
         self,
@@ -143,6 +148,7 @@ class ConstantStepSize(StepSizeInitializer):
     ):
         return self.lr_init
 
+
 class KeepStepSize(StepSizeInitializer):
     def get_initial_step(
         self,
@@ -156,6 +162,7 @@ class KeepStepSize(StepSizeInitializer):
         delta_loss: float,
     ):
         return prev_lr
+
 
 class ScaledStepSize(StepSizeInitializer):
     def get_initial_step(
@@ -176,6 +183,7 @@ class ScaledStepSize(StepSizeInitializer):
 
         return new_lr
 
+
 class QuadraticStepSize(StepSizeInitializer):
     def get_initial_step(
         self,
@@ -190,6 +198,7 @@ class QuadraticStepSize(StepSizeInitializer):
     ):
         eps = torch.finfo(params[0].dtype).eps
         return -param_dot(grad_params, step_dir) / (self.curvature_estimator.quadratic_form(objective, params, step_dir) + eps)
+
 
 class InterpolateStepSize(StepSizeInitializer):
     def get_initial_step(
@@ -210,9 +219,10 @@ class InterpolateStepSize(StepSizeInitializer):
             new_lr = 2 * delta_loss / (param_dot(prev_grad, prev_step_dir) + eps)
             new_lr = min(1.01 * new_lr, 1)
         return new_lr
-    
+
+
 class BarzilaiBorweinStepSize(StepSizeInitializer):
-    def __init__(self, long_step=True, *args, **kwargs):
+    def __init__(self, *args, long_step=True, **kwargs):
         self.use_long_step = long_step
         super().__init__(*args, **kwargs)
 
@@ -228,12 +238,13 @@ class BarzilaiBorweinStepSize(StepSizeInitializer):
         delta_loss: float,
     ):
         eps = torch.finfo(params[0].dtype).eps
-        s = param_scalar_prod(self.prev_lr, prev_step_dir)
+        s = param_scalar_prod(prev_lr, prev_step_dir)
         y = param_diff(grad_params, prev_grad)
         if self.use_long_step:
             return param_dot(s, y) / (param_dot(y, y) + eps)
         else:
             return param_dot(s, s) / (param_dot(s, y) + eps)
+
 
 class LipschitzStepSize(StepSizeInitializer):
     def get_initial_step(
@@ -248,6 +259,6 @@ class LipschitzStepSize(StepSizeInitializer):
         delta_loss: float,
     ):
         eps = torch.finfo(params[0].dtype).eps
-        s = param_scalar_prod(self.prev_lr, prev_step_dir)
+        s = param_scalar_prod(prev_lr, prev_step_dir)
         y = param_diff(grad_params, prev_grad)
         return param_norm(s) / (param_norm(y) + eps)

@@ -29,11 +29,19 @@ class HutchinsonDiagonalApproximation(CurvatureEstimator):
         Number of random samples to average.
     """
 
-    def __init__(self, n_samples: int = 1):
+    def __init__(self, n_samples: int = 1, skip_iters: int = 0):
         super().__init__(ndim=1, uses_blocks=True)
         self.n_samples = n_samples
+        self.skip_iters = skip_iters
+        self.iter_counter = 0
+        self.stale_diagonal = True
+        self.stored_diagonal = None
 
     def scaling_matrix(self, objective: ObjectiveFunction, params: Params) -> Params:
+        if not self.stale_diagonal and self.stored_diagonal is not None:
+            logger.debug("Used stored diagonal.")
+            return self.stored_diagonal
+
         param_size = param_numel(params)
         device = params[0].device
         h_diag = param_zero_like(params)
@@ -54,12 +62,25 @@ class HutchinsonDiagonalApproximation(CurvatureEstimator):
                 logger.debug("Calculated approximation for random sample number %d...", i)
 
         h_diag = param_scalar_prod(1 / self.n_samples, h_diag)
+        self.stored_diagonal = h_diag
+        self.stale_diagonal = False
 
         return h_diag
 
     def hvp(self, objective: ObjectiveFunction, params: Params, step_dir: Params) -> Params:
-        _, Hz = torch.autograd.functional.vhp(objective.loss, params, v=step_dir, create_graph=False)
-        return Hz
+        if self.stored_diagonal is None or self.stale_diagonal:
+            diagonal = self.scaling_matrix(objective, params)
+        else:
+            diagonal = self.stored_diagonal
+
+        return param_dot(diagonal, step_dir)
 
     def quadratic_form(self, objective: ObjectiveFunction, params: Params, step_dir: Params) -> torch.Tensor:
         return param_dot(step_dir, self.hvp(objective, params, step_dir))
+
+    def update(self):
+        self.iter_counter += 1
+        if self.iter_counter > self.skip_iters:
+            self.iter_counter = 0
+            self.stale_diagonal = True
+        logger.debug("Updated iteration counter, stale diagonal? %d.", self.stale_diagonal)

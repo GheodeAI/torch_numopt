@@ -10,12 +10,11 @@ curvature estimator.
 from abc import ABC
 from typing import Iterable
 import logging
+import math
 import torch
 from torch.optim import Optimizer
 
-from torch_numopt.utils.param_operations import param_add
-
-from .utils import param_diff, param_scalar_prod, param_dot, param_neg, param_norm, param_scaled_add, param_copy, param_detach, Params, torch_to_float
+from .utils import param_add, param_is_finite, param_dot, param_neg, param_norm, param_scaled_add, param_detach, Params, torch_to_float
 from .step_initializer import StepSizeInitializer, ConstantStepSize, create_step_size_init
 from .line_search import LineSearchSolver
 from .trust_region import TrustRegionSolver
@@ -72,16 +71,16 @@ class NumericalOptimizer(Optimizer, ABC):
         solver: str = "solve",
         fix_ascent: bool = True,
         min_lr: float = 0,
-        max_lr: float = 100
+        max_lr: float = 100,
     ):
         params = tuple(params)
         super().__init__(params=params, defaults={})
-        
+
         if lr_method is None:
             lr_method = ConstantStepSize(lr_init, curvature_estimator, min_lr, max_lr)
         elif isinstance(lr_method, str):
             lr_method = create_step_size_init(lr_method, lr_init, curvature_estimator, min_lr, max_lr)
-        
+
         self.params = params
         self.lr_method = lr_method
         self.lr_init = lr_method.lr_init
@@ -146,13 +145,18 @@ class NumericalOptimizer(Optimizer, ABC):
 
         new_params = param_scaled_add(params, step_dir, scale=lr)
 
-        with torch.no_grad():
-            for param, new_param in zip(params, new_params):
-                param.copy_(new_param)
+        with torch.inference_mode():
+            new_loss = torch_to_float(objective.loss(*new_params))
+
+        if param_is_finite(new_params) and math.isfinite(new_loss):
+            with torch.no_grad():
+                for param, new_param in zip(params, new_params):
+                    param.copy_(new_param)
+        else:
+            logger.critical("NaN found in loss or parameters. Skipping iteration.")
+            self.reset = True
 
         if not self.reset:
-            with torch.inference_mode():
-                new_loss = torch_to_float(objective.loss(*new_params))
             if self.prev_loss is not None:
                 self.delta_loss = new_loss - self.prev_loss
             self.prev_loss = new_loss
@@ -167,6 +171,7 @@ class NumericalOptimizer(Optimizer, ABC):
             self.prev_params = None
             self.prev_loss = None
             self.delta_loss = None
+            self.reset = False
 
     def step(self, objective: ObjectiveFunction):
         """
@@ -200,6 +205,9 @@ class NumericalOptimizer(Optimizer, ABC):
                 grad_params=tuple(gradient),
             )
 
+        if self.curvature_estimator is not None:
+            self.curvature_estimator.update()
+
 
 class LineSearchOptimizer(NumericalOptimizer, ABC):
     """
@@ -231,9 +239,11 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
         lr_init: float = 1,
         solver: str = "solve",
         min_lr: float = 0,
-        max_lr: float = 100
+        max_lr: float = 100,
     ):
-        super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver, min_lr=min_lr, max_lr=max_lr)
+        super().__init__(
+            params=params, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver, min_lr=min_lr, max_lr=max_lr
+        )
         self.line_search = line_search
 
     def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):
@@ -246,13 +256,18 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
 
         new_params, lr = self.line_search.find_step_size(params, step_dir, grad_params, lr_init, objective)
 
-        with torch.no_grad():
-            for param, new_param in zip(params, new_params):
-                param.copy_(new_param)
+        with torch.inference_mode():
+            new_loss = torch_to_float(objective.loss(*new_params))
+
+        if param_is_finite(new_params) and math.isfinite(new_loss):
+            with torch.no_grad():
+                for param, new_param in zip(params, new_params):
+                    param.copy_(new_param)
+        else:
+            logger.critical("NaN found in loss or parameters. Skipping iteration.")
+            self.reset = True
 
         if not self.reset:
-            with torch.inference_mode():
-                new_loss = torch_to_float(objective.loss(*new_params))
             if self.prev_loss is not None:
                 self.delta_loss = new_loss - self.prev_loss
             self.prev_loss = new_loss
@@ -268,6 +283,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
             self.prev_params = None
             self.prev_loss = None
             self.delta_loss = None
+            self.reset = False
 
 
 class TrustRegionOptimizer(NumericalOptimizer, ABC):
@@ -382,7 +398,8 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
 
         logging.info("Finished trust region search, rho = %g, final model radius = %g.", rho, model_radius)
 
-        if (self.prev_params is None and (new_loss < prev_loss)) or rho > self.accept_tol:
+        numerical_crash = not param_is_finite(new_params) or not math.isfinite(new_loss)
+        if not numerical_crash or (self.prev_params is None and (new_loss < prev_loss)) or rho > self.accept_tol:
             # Accept new parameters
             with torch.inference_mode():
                 for param, new_param in zip(params, new_params):
@@ -393,6 +410,10 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
             self.prev_loss = new_loss
             self.prev_params = param_detach(new_params)
             self.prev_step_dir = param_detach(step_dir)
+        elif numerical_crash:
+            logger.critical("NaN found in loss or parameters. Skipping iteration.")
+            self.prev_loss = prev_loss
+            self.reset = True
         else:
             logging.info("Parameters were not accepted.")
             self.prev_loss = prev_loss
@@ -409,3 +430,4 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
             self.prev_params = None
             self.prev_loss = None
             self.delta_loss = None
+            self.reset = False
