@@ -241,7 +241,7 @@ def test_trust_region_optimizer_increases_radius(scalar_obj, scalar_params, scal
     expected_step = (torch.tensor([1.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=exact_curvature, step_dir=expected_step)
 
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=10.0, accept_tol=0.1)
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, lr_init=10.0, accept_tol=0.1)
     # For the radius increase logic, we need curvature_estimator set (though not used by tr in this mock)
     opt.curvature_estimator = exact_curvature
     # Set previous radius to 1.0 (so current radius is 1.0)
@@ -266,7 +266,7 @@ def test_trust_region_optimizer_decreases_radius(scalar_obj, scalar_params, scal
     bad_step = (torch.tensor([5.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=naive_curvature, step_dir=bad_step)
 
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=2.0, accept_tol=0.1)
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, lr_init=2.0, accept_tol=0.1)
     opt.curvature_estimator = naive_curvature
     # Set previous radius to 2.0 (same as init)
     opt.prev_lr = 2.0
@@ -285,7 +285,7 @@ def test_trust_region_accepts_good_step(scalar_obj, scalar_params, scalar_grad, 
     """A step with rho>accept_tol should be accepted."""
     good_step = (torch.tensor([1.0], dtype=torch.float64),)  # gives decrease
     tr = FixedStepTrustRegion(curvature_estimator=exact_curvature, step_dir=good_step)
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1)
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, lr_init=1.0, accept_tol=0.1)
     opt.curvature_estimator = exact_curvature
     # Reset params to zero
     with torch.no_grad():
@@ -305,7 +305,7 @@ def test_trust_region_rejects_bad_step(scalar_obj, scalar_params, scalar_grad, n
     # Use a bad step that causes loss increase but model predicts decrease
     bad_step = (torch.tensor([5.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=naive_curvature, step_dir=bad_step)
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1)
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, lr_init=1.0, accept_tol=0.1)
     opt.curvature_estimator = naive_curvature
     # Reset params to zero
     with torch.no_grad():
