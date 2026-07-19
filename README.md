@@ -96,6 +96,7 @@ For more detailed examples and advanced usage (trust‑region, custom curvature 
 | `GaussNewtonLS`         | JᵀJ approximation      | Line search          | – |
 | `GaussNewtonTR`         | JᵀJ approximation      | Trust region         | – |
 | `LevenbergMarquardt`    | Damped JᵀJ             | Adaptive damping (μ) | Trust‑region damping |
+| `InexactLevenbergMarquardt`| Damped JᵀJ             | Adaptive damping (μ) | Trust‑region damping, Inexact, memory-efficient solver|
 | `ConjugateGradient`     | None (uses gradient)   | Fixed learning rate  | Non‑linear CG (FR, PR, etc.) |
 | `ConjugateGradientLS`   | None (uses gradient)   | Line search          | – |
 | `LBFGS`                 | Approx. inverse Hessian | Fixed learning rate  | Quasi‑Newton, memory‑efficient |

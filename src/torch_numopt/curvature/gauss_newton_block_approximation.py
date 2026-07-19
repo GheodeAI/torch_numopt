@@ -210,8 +210,6 @@ class GaussNewtonBlockApproximation(CurvatureEstimator):
                     logger.debug("Computed batch %d for the Gauss-Newton hvp...", i)
 
         if objective.reduction == "mean":
-            print(2 / objective.data_size)
-            print(hess_dot_step)
             hess_dot_step = param_scalar_prod(2 / objective.data_size, hess_dot_step)
         else:
             hess_dot_step = param_scalar_prod(2, hess_dot_step)

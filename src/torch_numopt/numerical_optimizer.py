@@ -296,33 +296,62 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         Parameter tensors.
     trust_region : TrustRegionSolver
         Trust-region solver that computes the step within a region.
-    radius_init : float, default=1.0
+    lr_init : float, default=1.0
         Initial trust-region radius.
+    curvature_estimator : CurvatureEstimator, optional
+        Curvature estimator; not directly used by the method, kept for compatibility.
+        The system will be solved internally by the trust region solver.
     accept_tol : float, default=0.1
         Threshold for the ratio ``rho``; if ``rho > accept_tol`` the step is
         accepted.
-    curvature_estimator : CurvatureEstimator, optional
-        Curvature estimator; Not directly used by the method, kept for compatibility. The
-        system will be solved internally by the trust region solver.
+    contract_tol : float, default=0.25
+        Threshold for the ratio ``rho``; if ``rho < contract_tol`` the model is
+        considered poor and the trust-region radius is shrunk by ``shrink_factor``.
+    expand_tol : float, default=0.75
+        Threshold for the ratio ``rho``; if ``rho > expand_tol`` and the step is
+        at the trust-region boundary, the radius is expanded by ``growth_factor``.
+    growth_factor : float, default=2
+        Factor by which the trust-region radius is multiplied when expanded.
+    shrink_factor : float, default=0.25
+        Factor by which the trust-region radius is multiplied when contracted.
+    radius_max : float, default=1e3
+        Maximum allowed trust-region radius.
     """
 
     def __init__(
         self,
         params: Params,
         trust_region: TrustRegionSolver,
-        radius_init: float = 1.0,
-        accept_tol: float = 0.1,
+        lr_init: float = 1.0,
         curvature_estimator: CurvatureEstimator = None,
+        *,
+        accept_tol: float = 0.1,
+        contract_tol: float = 0.25,
+        expand_tol: float = 0.75,
+        growth_factor: float = 2,
+        shrink_factor: float = 0.25,
+        radius_max: float = 1e3,
     ):
-        super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=radius_init)
+        assert (
+            accept_tol <= contract_tol
+        ), f"The acceptance tolerance for rho ({accept_tol}) must be smaller or equal to the contracting tolerance ({contract_tol})."
+        assert (
+            contract_tol < expand_tol
+        ), f"The expand tolerance for rho ({expand_tol}) must be smaller to the contracting tolerance ({contract_tol})."
+
+        super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=lr_init)
         self.trust_region = trust_region
         self.accept_tol = accept_tol
+        self.contract_tol = contract_tol
+        self.expand_tol = expand_tol
+        self.growth_factor = growth_factor
+        self.shrink_factor = shrink_factor
+        self.radius_max = radius_max
 
     def new_model_radius(
         self,
         objective: ObjectiveFunction,
         radius: float,
-        radius_init: float,
         loss: float,
         params: Params,
         grad_params: Params,
@@ -371,10 +400,10 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
 
         rho = (loss - new_loss) / (m_0 - m_p + eps)
 
-        if rho < 0.25:
-            radius *= 0.25
-        elif rho > 0.75 and torch.isclose(param_norm(step_dir), torch.tensor(radius, dtype=loss.dtype), rtol=1e-8, atol=1e-10):
-            radius = min(2 * radius, radius_init)
+        if rho < self.contract_tol:
+            radius = self.shrink_factor * radius
+        elif rho > self.expand_tol and torch.isclose(param_norm(step_dir), torch.tensor(radius, dtype=loss.dtype), rtol=1e-8, atol=1e-10):
+            radius = min(self.growth_factor * radius, self.radius_max)
 
         logger.debug(f"[TR] ρ={rho:+.4f}  Δ={radius:8.6f}  loss {loss:.6f} → {new_loss:.6f}")
 
@@ -384,9 +413,9 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         prev_loss = objective.loss(*params)
         model_radius = self.lr_init if self.prev_lr is None else self.prev_lr
 
-        logging.info("Starting trust region loop with radius %g.", model_radius)
+        logger.info("Starting trust region loop with radius %g.", model_radius)
         step_dir = self.trust_region.optimize_model(objective, params, model_radius, grad_params)
-        if self.fix_ascent and param_dot(grad_params, step_dir) > 1e-8:
+        if self.fix_ascent and param_dot(grad_params, step_dir) > 0:
             logger.warning("Ascent direction detected, falling back to steepest descent. ")
             step_dir = param_neg(grad_params)
         new_params = param_add(params, step_dir)
@@ -394,12 +423,12 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         with torch.inference_mode():
             new_loss = objective.loss(*new_params)
 
-        rho, model_radius = self.new_model_radius(objective, model_radius, self.lr_init, prev_loss, params, grad_params, new_loss, step_dir)
+        rho, model_radius = self.new_model_radius(objective, model_radius, prev_loss, params, grad_params, new_loss, step_dir)
 
-        logging.info("Finished trust region search, rho = %g, final model radius = %g.", rho, model_radius)
+        logger.info("Finished trust region search, rho = %g, final model radius = %g.", rho, model_radius)
 
-        numerical_crash = not param_is_finite(new_params) or not math.isfinite(new_loss)
-        if not numerical_crash and (self.prev_params is None and (new_loss < prev_loss)) or rho > self.accept_tol:
+        numerical_crash = not (param_is_finite(new_params) and math.isfinite(new_loss))
+        if not numerical_crash and rho > self.accept_tol:
             # Accept new parameters
             with torch.inference_mode():
                 for param, new_param in zip(params, new_params):
@@ -415,7 +444,7 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
             self.prev_loss = prev_loss
             self.reset = True
         else:
-            logging.info("Parameters were not accepted.")
+            logger.info("Parameters were not accepted.")
             self.prev_loss = prev_loss
             self.prev_params = param_detach(params)
 
