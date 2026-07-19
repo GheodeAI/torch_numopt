@@ -14,6 +14,7 @@
    conjugate_gradient
    gauss_newton
    gradient_descent
+   hutchinson_newton
    lbfgs
    levenberg_marquardt
    newton

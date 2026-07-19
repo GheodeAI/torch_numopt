@@ -1,5 +1,6 @@
 import torch
 import torch_numopt
+import math
 
 
 def train_loop(model, loss_fn, opt, data_loader, epochs=100, max_patience=50):
@@ -20,7 +21,7 @@ def train_loop(model, loss_fn, opt, data_loader, epochs=100, max_patience=50):
         print("epoch: ", epoch, end="")
         print(", loss: {}".format(all_loss[epoch + 1]))
 
-        if epoch > 0 and all_loss[epoch] <= all_loss[epoch + 1]:
+        if not math.isfinite(all_loss[epoch + 1]) or (epoch > 0 and all_loss[epoch] <= all_loss[epoch + 1]):
             patience -= 1
         else:
             patience = max_patience

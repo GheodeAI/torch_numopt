@@ -167,3 +167,6 @@ class CurvatureEstimator(ABC):
         torch.Tensor
             Scalar value vᵀ H v.
         """
+
+    def update(self):
+        """Updates the parameters of the curvature estimator."""

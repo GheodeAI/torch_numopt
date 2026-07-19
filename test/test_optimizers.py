@@ -129,31 +129,6 @@ class FixedStepTrustRegion(TrustRegionSolver):
 # ----------------------------------------------------------------------
 
 
-def test_initialize_lr_methods(scalar_obj, scalar_params, scalar_grad, exact_curvature):
-    opt = NumericalOptimizer(params=scalar_params, curvature_estimator=exact_curvature, lr_init=1.0, lr_method=None, fix_ascent=True)
-    # Set previous values with non‑zero loss change
-    prev_lr = 0.5
-    prev_grad = (torch.tensor([-4.0], dtype=torch.float64),)
-    prev_step_dir = (torch.tensor([2.0], dtype=torch.float64),)
-    prev_loss = -2.0
-    opt.prev_lr = prev_lr
-    opt.prev_grad = prev_grad
-    opt.prev_step_dir = prev_step_dir
-    opt.prev_loss = prev_loss
-
-    step_dir = (torch.tensor([1.0], dtype=torch.float64),)
-
-    methods = [None, "keep", "scaled", "lipschitz", "BB1", "BB2", "quadratic"]
-    for method in methods:
-        opt.lr_method = method
-        lr = opt.initialize_lr(lr=1.0, grad_params=scalar_grad, step_dir=step_dir, objective=scalar_obj, params=scalar_params)
-        assert lr > 0, f"Method {method} returned non‑positive lr"
-
-    with pytest.raises(ValueError):
-        opt.lr_method = "invalid"
-        opt.initialize_lr(1.0, scalar_grad, step_dir, scalar_obj, scalar_params)
-
-
 def test_get_step_direction_returns_step(scalar_obj, scalar_params, scalar_grad, exact_curvature):
     """Just verify that get_step_direction returns a non‑None step."""
     opt = NumericalOptimizer(params=scalar_params, curvature_estimator=exact_curvature, lr_init=1.0, fix_ascent=True)
@@ -266,7 +241,7 @@ def test_trust_region_optimizer_increases_radius(scalar_obj, scalar_params, scal
     expected_step = (torch.tensor([1.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=exact_curvature, step_dir=expected_step)
 
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=10.0, accept_tol=0.1)
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, lr_init=10.0, accept_tol=0.1)
     # For the radius increase logic, we need curvature_estimator set (though not used by tr in this mock)
     opt.curvature_estimator = exact_curvature
     # Set previous radius to 1.0 (so current radius is 1.0)
@@ -291,7 +266,7 @@ def test_trust_region_optimizer_decreases_radius(scalar_obj, scalar_params, scal
     bad_step = (torch.tensor([5.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=naive_curvature, step_dir=bad_step)
 
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=2.0, accept_tol=0.1)
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, lr_init=2.0, accept_tol=0.1)
     opt.curvature_estimator = naive_curvature
     # Set previous radius to 2.0 (same as init)
     opt.prev_lr = 2.0
@@ -310,7 +285,7 @@ def test_trust_region_accepts_good_step(scalar_obj, scalar_params, scalar_grad, 
     """A step with rho>accept_tol should be accepted."""
     good_step = (torch.tensor([1.0], dtype=torch.float64),)  # gives decrease
     tr = FixedStepTrustRegion(curvature_estimator=exact_curvature, step_dir=good_step)
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1)
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, lr_init=1.0, accept_tol=0.1)
     opt.curvature_estimator = exact_curvature
     # Reset params to zero
     with torch.no_grad():
@@ -330,7 +305,7 @@ def test_trust_region_rejects_bad_step(scalar_obj, scalar_params, scalar_grad, n
     # Use a bad step that causes loss increase but model predicts decrease
     bad_step = (torch.tensor([5.0], dtype=torch.float64),)
     tr = FixedStepTrustRegion(curvature_estimator=naive_curvature, step_dir=bad_step)
-    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, radius_init=1.0, accept_tol=0.1)
+    opt = TrustRegionOptimizer(params=scalar_params, trust_region=tr, lr_init=1.0, accept_tol=0.1)
     opt.curvature_estimator = naive_curvature
     # Reset params to zero
     with torch.no_grad():

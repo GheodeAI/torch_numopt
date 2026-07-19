@@ -24,4 +24,5 @@ Submodules
    torch_numopt.numerical_optimizer
    torch_numopt.objective
    torch_numopt.solve_system
+   torch_numopt.step_initializer
    torch_numopt.trust_region

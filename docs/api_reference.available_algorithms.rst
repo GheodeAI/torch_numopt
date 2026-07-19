@@ -10,10 +10,6 @@ The library provides concrete optimizers that combine a curvature estimator with
 All optimizers inherit from :class:`torch.optim.Optimizer` and are used with a closure-based objective
 (see :class:`~torch_numopt.objective.ObjectiveFunction`).
 
-For advanced customization of the underlying line-search or trust-region mechanics
-(e.g., using a different solver or condition), refer to the dedicated page
-:doc:`/advanced/line_search_trust_region`.
-
 
 Fixed-step optimizers
 ---------------------
@@ -54,6 +50,11 @@ These optimizers compute a direction and apply a scalar step length. The learnin
      - ``lr_init``, ``lr_method``, ``damping``, ``mu``, ``solver``
      - Inexact Newton using an iterative solver (e.g., ``"cg-trunc"``). Never forms the full Hessian.
 
+   * - :py:class:`~torch_numopt.algorithms.hutchinson_newton.DiagonalNewton`
+     - Diagonal Hessian (Hutchinson)
+     - ``lr_init``, ``lr_method``, ``n_samples``, ``skip_iters``
+     - Newton's method using the Hutchinson Diagonal approximation. Not recommended but added for completeness
+
    * - :py:class:`~torch_numopt.algorithms.gauss_newton.GaussNewton`
      - Gauss-Newton (JᵀJ)
      - ``lr_init``, ``lr_method``, ``damping``, ``mu``, ``block_hessian``, ``solver``
@@ -66,7 +67,7 @@ These optimizers compute a direction and apply a scalar step length. The learnin
 
    * - :py:class:`~torch_numopt.algorithms.adahessian.AdaHessian`
      - Diagonal Hessian (Hutchinson)
-     - ``lr_init``, ``lr_method``, ``beta1``, ``beta2``, ``k``, ``eps``, ``n_samples``
+     - ``lr_init``, ``lr_method``, ``beta1``, ``beta2``, ``k``, ``eps``, ``n_samples``, ``skip_iters``
      - Adaptive method similar to Adam, but using the diagonal of the Hessian.
 
 
@@ -120,13 +121,13 @@ These optimizers compute a direction and then perform a line search to find an a
 
    * - :py:class:`~torch_numopt.algorithms.adahessian.AdaHessianLS`
      - Diagonal Hessian (Hutchinson)
-     - ``lr_init``, ``lr_method``, ``beta1``, ``beta2``, ``k``, ``eps``, ``n_samples``
+     - ``lr_init``, ``lr_method``, ``beta1``, ``beta2``, ``k``, ``eps``, ``n_samples``, ``skip_iters``
      - AdaHessian with line search.
 
    * - :py:class:`~torch_numopt.algorithms.adahessian.DiagonalNewtonLS`
      - Diagonal Hessian (Hutchinson)
-     - ``lr_init``, ``lr_method``, ``n_samples``
-     - Diagonal Newton (without momentum) with line search.
+     - ``lr_init``, ``lr_method``, ``n_samples``, ``skip_iters``
+     - Diagonal Newton with line search.
 
 
 Trust-region optimizers
@@ -136,7 +137,7 @@ These optimizers solve a subproblem that restricts the step to a region where th
 
 .. note::
    All ``*TR`` optimizers accept the common trust-region parameters:
-   ``radius_init``, ``trust_region_method``, and ``accept_tol``.
+   ``trust_region_method``, and ``accept_tol``, ``contract_tol``, ``expand_tol``, ``growth_factor``, ``shrink_factor``, ``radius_max``.
    The table below lists only the parameters that are specific to each algorithm.
 
 .. list-table::
@@ -169,5 +170,10 @@ These optimizers solve a subproblem that restricts the step to a region where th
 
    * - :py:class:`~torch_numopt.algorithms.levenberg_marquardt.LevenbergMarquardt`
      - Damped Gauss-Newton
-     - ``mu``, ``mu_dec``, ``mu_max``, ``accept_tol``, ``solver``
+     - ``mu``, ``mu_max``, ``solver``
      - Interpolates between Gauss-Newton and gradient descent via adaptive damping. Uses block Gauss-Newton with Fletcher damping internally.
+
+   * - :py:class:`~torch_numopt.algorithms.levenberg_marquardt.InexactLevenbergMarquardt`
+     - Damped Gauss-Newton
+     - ``mu``, ``mu_max``, ``solver``
+     - Interpolates between Gauss-Newton and gradient descent via adaptive damping. Uses inexact solvers to solve the step size subproblem.

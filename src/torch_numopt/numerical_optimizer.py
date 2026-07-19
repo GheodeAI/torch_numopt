@@ -10,12 +10,12 @@ curvature estimator.
 from abc import ABC
 from typing import Iterable
 import logging
+import math
 import torch
 from torch.optim import Optimizer
 
-from torch_numopt.utils.param_operations import param_add
-
-from .utils import param_diff, param_scalar_prod, param_dot, param_neg, param_norm, param_scaled_add, param_copy, param_detach, Params, torch_to_float
+from .utils import param_add, param_is_finite, param_dot, param_neg, param_norm, param_scaled_add, param_detach, Params, torch_to_float
+from .step_initializer import StepSizeInitializer, ConstantStepSize, create_step_size_init
 from .line_search import LineSearchSolver
 from .trust_region import TrustRegionSolver
 from .curvature_estimator import CurvatureEstimator
@@ -66,28 +66,31 @@ class NumericalOptimizer(Optimizer, ABC):
         self,
         params: Params,
         curvature_estimator: CurvatureEstimator,
+        lr_method: str | StepSizeInitializer = None,
         lr_init: float = 1,
-        lr_method: str | None = None,
-        lr_tol: float = 1e-18,
         solver: str = "solve",
         fix_ascent: bool = True,
+        min_lr: float = 0,
+        max_lr: float = 100,
     ):
-        assert lr_init > 0, "Learning rate must be a positive number."
-
         params = tuple(params)
         super().__init__(params=params, defaults={})
 
+        if lr_method is None:
+            lr_method = ConstantStepSize(lr_init, curvature_estimator, min_lr, max_lr)
+        elif isinstance(lr_method, str):
+            lr_method = create_step_size_init(lr_method, lr_init, curvature_estimator, min_lr, max_lr)
+
         self.params = params
-        self.lr_init = lr_init
         self.lr_method = lr_method
-        self.lr_tol = lr_tol
+        self.lr_init = lr_method.lr_init
         self.curvature_estimator = curvature_estimator
         self.solver = solver
         self.fix_ascent = fix_ascent
 
         # Storage of previous solutions
         self.prev_lr = None
-        self.prev_lr_init = lr_init
+        self.prev_lr_init = None
         self.prev_grad = None
         self.prev_step_dir = None
         self.prev_params = None
@@ -95,83 +98,6 @@ class NumericalOptimizer(Optimizer, ABC):
         self.delta_loss = None
 
         self.reset = False
-
-    def initialize_lr(self, lr: float, grad_params: Params, step_dir: Params, objective: ObjectiveFunction, params: Params):
-        """
-        Compute an initial learning rate for the current step.
-
-        Uses the stored information from previous iterations and the chosen
-        ``lr_method`` to propose a learning rate.
-
-        Parameters
-        ----------
-        lr : float
-            Base learning rate (fallback value).
-        grad_params : Params
-            Current gradient.
-        step_dir : Params
-            Proposed step direction (before scaling).
-        objective : ObjectiveFunction
-            Objective function (used for curvature evaluations).
-        params : Params
-            Current parameters.
-
-        Returns
-        -------
-        float
-            Proposed initial learning rate.
-        """
-
-        if self.prev_lr is None:
-            return lr
-
-        prev_grad = self.prev_grad
-        prev_step_dir = self.prev_step_dir
-
-        s = param_scalar_prod(self.prev_lr, prev_step_dir)
-        y = param_diff(grad_params, prev_grad)
-
-        new_lr = None
-        eps = torch.finfo(params[0].dtype).eps
-        match self.lr_method:
-            case None:
-                new_lr = lr
-            case "keep":
-                new_lr = self.prev_lr
-            case "scaled":
-                new_lr = self.prev_lr_init * param_dot(prev_grad, prev_step_dir) / (param_dot(grad_params, step_dir) + eps)
-            case "quadratic":
-                new_lr = -param_dot(grad_params, step_dir) / (self.curvature_estimator.quadratic_form(objective, params, step_dir) + eps)
-            case "interpolate":
-                if self.delta_loss is None:
-                    new_lr = lr
-                else:
-                    new_lr = 2 * self.delta_loss / param_dot(prev_grad, prev_step_dir)
-                    new_lr = min(1.01 * new_lr, 1)
-            case "lipschitz":
-                new_lr = param_norm(s) / (param_norm(y) + eps)
-            case "BB1":
-                # Barzilai-Borwein first formula
-                new_lr = param_dot(s, s) / (param_dot(s, y) + eps)
-            case "BB2":
-                # Barzilai-Borwein second formula
-                new_lr = param_dot(s, y) / (param_dot(y, y) + eps)
-            case _:
-                lr_init_methods_str = ", ".join([f"'{i}'" if i is not None else "None" for i in lr_init_methods])
-                last_comma_idx = lr_init_methods_str.rfind(",")
-                lr_init_methods_str = lr_init_methods_str[:last_comma_idx] + " or" + lr_init_methods_str[last_comma_idx + 1 :]
-                raise ValueError(f"Learning rate initialization method {self.lr_method} does not exist. Try {lr_init_methods_str}.")
-
-        if new_lr <= self.lr_tol:
-            logger.error("Estimated lr (%g) will yield an ascent direction. Falling back to guess %g", new_lr, lr)
-            new_lr = lr
-
-        if isinstance(new_lr, torch.Tensor):
-            new_lr = new_lr.item()
-
-        logger.info("Initial lr generated = %g with method %s and initial guess %g.", new_lr, self.lr_method, lr)
-
-        return new_lr
 
     def get_step_direction(self, objective: ObjectiveFunction, grad_params: Params):
         """
@@ -215,17 +141,22 @@ class NumericalOptimizer(Optimizer, ABC):
         if self.fix_ascent and param_dot(grad_params, step_dir) > 1e-8:
             logger.warning("Ascent direction detected, falling back to steepest descent. ")
             step_dir = param_neg(grad_params)
-        lr = self.initialize_lr(self.lr_init, grad_params, step_dir, objective, params)
+        lr = self.lr_method(objective, params, grad_params, self.prev_grad, step_dir, self.prev_step_dir, self.prev_lr, self.delta_loss)
 
         new_params = param_scaled_add(params, step_dir, scale=lr)
 
-        with torch.no_grad():
-            for param, new_param in zip(params, new_params):
-                param.copy_(new_param)
+        with torch.inference_mode():
+            new_loss = torch_to_float(objective.loss(*new_params))
+
+        if param_is_finite(new_params) and math.isfinite(new_loss):
+            with torch.no_grad():
+                for param, new_param in zip(params, new_params):
+                    param.copy_(new_param)
+        else:
+            logger.critical("NaN found in loss or parameters. Skipping iteration.")
+            self.reset = True
 
         if not self.reset:
-            with torch.inference_mode():
-                new_loss = torch_to_float(objective.loss(*new_params))
             if self.prev_loss is not None:
                 self.delta_loss = new_loss - self.prev_loss
             self.prev_loss = new_loss
@@ -240,6 +171,7 @@ class NumericalOptimizer(Optimizer, ABC):
             self.prev_params = None
             self.prev_loss = None
             self.delta_loss = None
+            self.reset = False
 
     def step(self, objective: ObjectiveFunction):
         """
@@ -273,6 +205,9 @@ class NumericalOptimizer(Optimizer, ABC):
                 grad_params=tuple(gradient),
             )
 
+        if self.curvature_estimator is not None:
+            self.curvature_estimator.update()
+
 
 class LineSearchOptimizer(NumericalOptimizer, ABC):
     """
@@ -300,11 +235,15 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
         params: Iterable[torch.Tensor],
         curvature_estimator: CurvatureEstimator,
         line_search: LineSearchSolver,
+        lr_method: str | StepSizeInitializer = None,
         lr_init: float = 1,
-        lr_method: str | None = None,
         solver: str = "solve",
+        min_lr: float = 0,
+        max_lr: float = 100,
     ):
-        super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver)
+        super().__init__(
+            params=params, curvature_estimator=curvature_estimator, lr_init=lr_init, lr_method=lr_method, solver=solver, min_lr=min_lr, max_lr=max_lr
+        )
         self.line_search = line_search
 
     def apply_gradients(self, objective: ObjectiveFunction, params: Params, grad_params: Params):
@@ -313,17 +252,22 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
             logger.warning("Ascent direction detected, falling back to steepest descent. ")
             step_dir = param_neg(grad_params)
 
-        lr_init = self.initialize_lr(self.lr_init, grad_params, step_dir, objective, params)
+        lr_init = self.lr_method(objective, params, grad_params, self.prev_grad, step_dir, self.prev_step_dir, self.prev_lr, self.delta_loss)
 
         new_params, lr = self.line_search.find_step_size(params, step_dir, grad_params, lr_init, objective)
 
-        with torch.no_grad():
-            for param, new_param in zip(params, new_params):
-                param.copy_(new_param)
+        with torch.inference_mode():
+            new_loss = torch_to_float(objective.loss(*new_params))
+
+        if param_is_finite(new_params) and math.isfinite(new_loss):
+            with torch.no_grad():
+                for param, new_param in zip(params, new_params):
+                    param.copy_(new_param)
+        else:
+            logger.critical("NaN found in loss or parameters. Skipping iteration.")
+            self.reset = True
 
         if not self.reset:
-            with torch.inference_mode():
-                new_loss = torch_to_float(objective.loss(*new_params))
             if self.prev_loss is not None:
                 self.delta_loss = new_loss - self.prev_loss
             self.prev_loss = new_loss
@@ -339,6 +283,7 @@ class LineSearchOptimizer(NumericalOptimizer, ABC):
             self.prev_params = None
             self.prev_loss = None
             self.delta_loss = None
+            self.reset = False
 
 
 class TrustRegionOptimizer(NumericalOptimizer, ABC):
@@ -351,33 +296,62 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         Parameter tensors.
     trust_region : TrustRegionSolver
         Trust-region solver that computes the step within a region.
-    radius_init : float, default=1.0
+    lr_init : float, default=1.0
         Initial trust-region radius.
+    curvature_estimator : CurvatureEstimator, optional
+        Curvature estimator; not directly used by the method, kept for compatibility.
+        The system will be solved internally by the trust region solver.
     accept_tol : float, default=0.1
         Threshold for the ratio ``rho``; if ``rho > accept_tol`` the step is
         accepted.
-    curvature_estimator : CurvatureEstimator, optional
-        Curvature estimator; Not directly used by the method, kept for compatibility. The
-        system will be solved internally by the trust region solver.
+    contract_tol : float, default=0.25
+        Threshold for the ratio ``rho``; if ``rho < contract_tol`` the model is
+        considered poor and the trust-region radius is shrunk by ``shrink_factor``.
+    expand_tol : float, default=0.75
+        Threshold for the ratio ``rho``; if ``rho > expand_tol`` and the step is
+        at the trust-region boundary, the radius is expanded by ``growth_factor``.
+    growth_factor : float, default=2
+        Factor by which the trust-region radius is multiplied when expanded.
+    shrink_factor : float, default=0.25
+        Factor by which the trust-region radius is multiplied when contracted.
+    radius_max : float, default=1e3
+        Maximum allowed trust-region radius.
     """
 
     def __init__(
         self,
         params: Params,
         trust_region: TrustRegionSolver,
-        radius_init: float = 1.0,
-        accept_tol: float = 0.1,
+        lr_init: float = 1.0,
         curvature_estimator: CurvatureEstimator = None,
+        *,
+        accept_tol: float = 0.1,
+        contract_tol: float = 0.25,
+        expand_tol: float = 0.75,
+        growth_factor: float = 2,
+        shrink_factor: float = 0.25,
+        radius_max: float = 1e3,
     ):
-        super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=radius_init)
+        assert (
+            accept_tol <= contract_tol
+        ), f"The acceptance tolerance for rho ({accept_tol}) must be smaller or equal to the contracting tolerance ({contract_tol})."
+        assert (
+            contract_tol < expand_tol
+        ), f"The expand tolerance for rho ({expand_tol}) must be smaller to the contracting tolerance ({contract_tol})."
+
+        super().__init__(params=params, curvature_estimator=curvature_estimator, lr_init=lr_init)
         self.trust_region = trust_region
         self.accept_tol = accept_tol
+        self.contract_tol = contract_tol
+        self.expand_tol = expand_tol
+        self.growth_factor = growth_factor
+        self.shrink_factor = shrink_factor
+        self.radius_max = radius_max
 
     def new_model_radius(
         self,
         objective: ObjectiveFunction,
         radius: float,
-        radius_init: float,
         loss: float,
         params: Params,
         grad_params: Params,
@@ -426,10 +400,10 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
 
         rho = (loss - new_loss) / (m_0 - m_p + eps)
 
-        if rho < 0.25:
-            radius *= 0.25
-        elif rho > 0.75 and torch.isclose(param_norm(step_dir), torch.tensor(radius, dtype=loss.dtype), rtol=1e-8, atol=1e-10):
-            radius = min(2 * radius, radius_init)
+        if rho < self.contract_tol:
+            radius = self.shrink_factor * radius
+        elif rho > self.expand_tol and torch.isclose(param_norm(step_dir), torch.tensor(radius, dtype=loss.dtype), rtol=1e-8, atol=1e-10):
+            radius = min(self.growth_factor * radius, self.radius_max)
 
         logger.debug(f"[TR] ρ={rho:+.4f}  Δ={radius:8.6f}  loss {loss:.6f} → {new_loss:.6f}")
 
@@ -439,9 +413,9 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         prev_loss = objective.loss(*params)
         model_radius = self.lr_init if self.prev_lr is None else self.prev_lr
 
-        logging.info("Starting trust region loop with radius %g.", model_radius)
+        logger.info("Starting trust region loop with radius %g.", model_radius)
         step_dir = self.trust_region.optimize_model(objective, params, model_radius, grad_params)
-        if self.fix_ascent and param_dot(grad_params, step_dir) > 1e-8:
+        if self.fix_ascent and param_dot(grad_params, step_dir) > 0:
             logger.warning("Ascent direction detected, falling back to steepest descent. ")
             step_dir = param_neg(grad_params)
         new_params = param_add(params, step_dir)
@@ -449,11 +423,12 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         with torch.inference_mode():
             new_loss = objective.loss(*new_params)
 
-        rho, model_radius = self.new_model_radius(objective, model_radius, self.lr_init, prev_loss, params, grad_params, new_loss, step_dir)
+        rho, model_radius = self.new_model_radius(objective, model_radius, prev_loss, params, grad_params, new_loss, step_dir)
 
-        logging.info("Finished trust region search, rho = %g, final model radius = %g.", rho, model_radius)
+        logger.info("Finished trust region search, rho = %g, final model radius = %g.", rho, model_radius)
 
-        if (self.prev_params is None and (new_loss < prev_loss)) or rho > self.accept_tol:
+        numerical_crash = not (param_is_finite(new_params) and math.isfinite(new_loss))
+        if not numerical_crash and rho > self.accept_tol:
             # Accept new parameters
             with torch.inference_mode():
                 for param, new_param in zip(params, new_params):
@@ -464,8 +439,12 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
             self.prev_loss = new_loss
             self.prev_params = param_detach(new_params)
             self.prev_step_dir = param_detach(step_dir)
+        elif numerical_crash:
+            logger.critical("NaN found in loss or parameters. Skipping iteration.")
+            self.prev_loss = prev_loss
+            self.reset = True
         else:
-            logging.info("Parameters were not accepted.")
+            logger.info("Parameters were not accepted.")
             self.prev_loss = prev_loss
             self.prev_params = param_detach(params)
 
@@ -480,3 +459,4 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
             self.prev_params = None
             self.prev_loss = None
             self.delta_loss = None
+            self.reset = False

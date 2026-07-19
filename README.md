@@ -96,12 +96,14 @@ For more detailed examples and advanced usage (trust‑region, custom curvature 
 | `GaussNewtonLS`         | JᵀJ approximation      | Line search          | – |
 | `GaussNewtonTR`         | JᵀJ approximation      | Trust region         | – |
 | `LevenbergMarquardt`    | Damped JᵀJ             | Adaptive damping (μ) | Trust‑region damping |
+| `InexactLevenbergMarquardt`| Damped JᵀJ             | Adaptive damping (μ) | Trust‑region damping, Inexact, memory-efficient solver|
 | `ConjugateGradient`     | None (uses gradient)   | Fixed learning rate  | Non‑linear CG (FR, PR, etc.) |
 | `ConjugateGradientLS`   | None (uses gradient)   | Line search          | – |
 | `LBFGS`                 | Approx. inverse Hessian | Fixed learning rate  | Quasi‑Newton, memory‑efficient |
 | `LBFGSLS`               | Approx. inverse Hessian | Line search          | Recommended for L‑BFGS |
 | `AdaHessian`            | Diagonal Hessian (Hutchinson) | Fixed learning rate | Adaptive, scalable, uses momentum |
 | `AdaHessianLS`          | Diagonal Hessian (Hutchinson) | Line search | Adaptive, scalable, uses momentum |
+| `DiagonalNewton`        | Diagonal Hessian (Hutchinson) | Fixed learning rate | – |
 | `DiagonalNewtonLS`      | Diagonal Hessian (Hutchinson) | Line search | – |
 | `GradientDescent`       | Identity               | Fixed learning rate  | Baseline; requires manual tuning |
 | `GradientDescentLS`     | Identity               | Line search          | Robust step‑size selection |
