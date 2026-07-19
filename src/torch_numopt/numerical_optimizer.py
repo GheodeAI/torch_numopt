@@ -399,7 +399,7 @@ class TrustRegionOptimizer(NumericalOptimizer, ABC):
         logging.info("Finished trust region search, rho = %g, final model radius = %g.", rho, model_radius)
 
         numerical_crash = not param_is_finite(new_params) or not math.isfinite(new_loss)
-        if not numerical_crash or (self.prev_params is None and (new_loss < prev_loss)) or rho > self.accept_tol:
+        if not numerical_crash and (self.prev_params is None and (new_loss < prev_loss)) or rho > self.accept_tol:
             # Accept new parameters
             with torch.inference_mode():
                 for param, new_param in zip(params, new_params):

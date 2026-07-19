@@ -17,6 +17,8 @@ def create_step_size_init(method: str, lr_init: float, curvature_estimator: Curv
             step_size_init = KeepStepSize(lr_init, curvature_estimator, min_lr, max_lr)
         case "scaled":
             step_size_init = ScaledStepSize(lr_init, curvature_estimator, min_lr, max_lr)
+        case "quadratic":
+            step_size_init = QuadraticStepSize(lr_init, curvature_estimator, min_lr, max_lr)
         case "interpolate":
             step_size_init = InterpolateStepSize(lr_init, curvature_estimator, min_lr, max_lr)
         case "lipschitz":
@@ -43,7 +45,6 @@ class StepSizeInitializer(ABC):
         self.min_lr = min_lr
         self.max_lr = max_lr
         self.prev_lr_init = lr_init
-        self.curvature_estimator = None
         self.prev_grad = None
         self.prev_step_dir = None
 

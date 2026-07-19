@@ -3,7 +3,7 @@ API reference
 
 This section provides detailed documentation for all the components of the library.
 
-The API is organised into two main parts:
+The API is organized into two main parts:
 
 1. :doc:`Available algorithms <api_reference.available_algorithms>`
    – Ready-to-use optimizers grouped by step-selection strategy (fixed step, line search, trust region).
