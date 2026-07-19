@@ -133,12 +133,29 @@ class GradientDescentTR(TrustRegionOptimizer):
         the base class.
     """
 
-    def __init__(self, params: Params, radius_init: float = 1.0, trust_region_method: str = "cauchy", accept_tol: float = 1.0):
+    def __init__(
+        self,
+        params: Params,
+        lr_init: float = 1.0,
+        trust_region_method: str = "cauchy",
+        *,
+        accept_tol: float = 0.1,
+        contract_tol: float = 0.25,
+        expand_tol: float = 0.75,
+        growth_factor: float = 2,
+        shrink_factor: float = 0.25,
+        radius_max: float = 1e3,
+    ):
         super().__init__(
             params,
             trust_region=create_trust_region_solver(method=trust_region_method, curvature_estimator=NaiveIdentityCalculator()),
-            radius_init=radius_init,
+            lr_init=lr_init,
             accept_tol=accept_tol,
+            contract_tol=contract_tol,
+            expand_tol=expand_tol,
+            growth_factor=growth_factor,
+            shrink_factor=shrink_factor,
+            radius_max=radius_max,
         )
 
 

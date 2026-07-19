@@ -20,7 +20,7 @@ from .gradient_descent import GradientDescent, GradientDescentLS, GradientDescen
 from .conjugate_gradient import ConjugateGradient, ConjugateGradientLS
 from .newton import Newton, NewtonLS, NewtonTR, NewtonCG, NewtonCGLS, NewtonCGTR
 from .gauss_newton import GaussNewton, GaussNewtonLS, GaussNewtonTR
-from .levenberg_marquardt import LevenbergMarquardt
+from .levenberg_marquardt import LevenbergMarquardt, InexactLevenbergMarquardt
 from .lbfgs import LBFGS, LBFGSLS
 from .hutchinson_newton import DiagonalNewton, DiagonalNewtonLS
 from .adahessian import AdaHessian, AdaHessianLS
@@ -42,6 +42,7 @@ __all__ = [
     "GaussNewtonLS",
     "GaussNewtonTR",
     "LevenbergMarquardt",
+    "InexactLevenbergMarquardt",
     "LBFGS",
     "LBFGSLS",
     "AdaHessian",

@@ -137,7 +137,7 @@ These optimizers solve a subproblem that restricts the step to a region where th
 
 .. note::
    All ``*TR`` optimizers accept the common trust-region parameters:
-   ``radius_init``, ``trust_region_method``, and ``accept_tol``.
+   ``trust_region_method``, and ``accept_tol``, ``contract_tol``, ``expand_tol``, ``growth_factor``, ``shrink_factor``, ``radius_max``.
    The table below lists only the parameters that are specific to each algorithm.
 
 .. list-table::
@@ -170,5 +170,10 @@ These optimizers solve a subproblem that restricts the step to a region where th
 
    * - :py:class:`~torch_numopt.algorithms.levenberg_marquardt.LevenbergMarquardt`
      - Damped Gauss-Newton
-     - ``mu``, ``mu_dec``, ``mu_max``, ``accept_tol``, ``solver``
+     - ``mu``, ``mu_max``, ``solver``
      - Interpolates between Gauss-Newton and gradient descent via adaptive damping. Uses block Gauss-Newton with Fletcher damping internally.
+
+   * - :py:class:`~torch_numopt.algorithms.levenberg_marquardt.InexactLevenbergMarquardt`
+     - Damped Gauss-Newton
+     - ``mu``, ``mu_max``, ``solver``
+     - Interpolates between Gauss-Newton and gradient descent via adaptive damping. Uses inexact solvers to solve the step size subproblem.
