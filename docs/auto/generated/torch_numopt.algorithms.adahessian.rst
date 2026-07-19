@@ -1,4 +1,4 @@
-﻿torch\_numopt.algorithms.adahessian
+torch\_numopt.algorithms.adahessian
 ===================================
 
 .. automodule:: torch_numopt.algorithms.adahessian
@@ -11,5 +11,4 @@
       AdaHessian
       AdaHessianLS
       AdaHessianMixin
-      DiagonalNewtonLS
    

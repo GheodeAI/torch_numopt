@@ -3,7 +3,7 @@
 Custom optimizers: building from components
 ===========================================
 
-While the library provides many ready-to-use optimizers (see :doc:`/api_reference/algorithms`), you can also **assemble your own** by combining:
+While the library provides many ready-to-use optimizers (see :doc:`api_reference.available_algorithms`), you can also **assemble your own** by combining:
 
 - a :class:`~torch_numopt.curvature_estimator.CurvatureEstimator` (defines the Hessian approximation),
 - and a **step-length strategy**. The library supports three distinct strategies:
